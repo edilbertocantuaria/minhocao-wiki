@@ -70,9 +70,18 @@ build/
 api/docs/*.pdf
 api/docs/*.zip
 api/docs/*.docx
+api/docs/unb
 
 # =========================
 # Experiment outputs
 # =========================
 api/experiments/
 api/results/
+
+
+# =========================
+# Others
+# =========================
+gera_arquivos.py
+*.txt
+api/shortcut.bash

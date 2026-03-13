@@ -1,0 +1,72 @@
+# ================================
+# LLM / RAG
+# ================================
+
+langchain==0.2.7
+langchain-community==0.2.7
+langchain-openai==0.1.16
+langchain-experimental==0.0.62
+langchainhub==0.1.20
+langgraph==0.3.34
+
+openai>=1.35.0,<2.0.0
+tiktoken>=0.7.0
+
+
+# ================================
+# Vector Database
+# ================================
+
+pinecone-client==4.1.2
+
+
+# ================================
+# API
+# ================================
+
+fastapi>=0.111,<1.0
+uvicorn[standard]>=0.30,<1.0
+httpx<0.28
+requests>=2.32
+
+
+# ================================
+# Document Processing
+# ================================
+
+pymupdf==1.24.7
+pyyaml==6.0.1
+
+
+# ================================
+# Data / ML
+# ================================
+
+numpy==1.26.4
+pandas==2.2.2
+scikit-learn==1.5.1
+
+
+# ================================
+# Search Tools
+# ================================
+pinecone-client==4.1.2
+duckduckgo-search==8.0.1
+wikipedia==1.4.0
+
+
+# ================================
+# Utils
+# ================================
+
+tqdm==4.66.4
+graphviz==0.20.3
+
+
+# ================================
+# Google integrations (optional)
+# ================================
+
+langchain-google-genai==1.0.7
+langchain-google-community
+google-api-python-client
