@@ -48,7 +48,7 @@ Failure rule:
 
 In that case respond exactly with:
 
-"The information is not available in the provided documents or web results."
+"A informação não está disponível nos documentos fornecidos ou nos resultados da web."
 """
 
 
