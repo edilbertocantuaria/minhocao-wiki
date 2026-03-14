@@ -1,0 +1,22 @@
+services:
+  api:
+    build:
+      context: ./api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./api/config.yaml:/app/config.yaml:ro
+      - ./api/docs:/app/docs
+      - ./api/logs:/app/logs
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./web
+    ports:
+      - "3000:3000"
+    environment:
+      - API_BASE_URL=http://api:8000
+    depends_on:
+      - api
+    restart: unless-stopped
