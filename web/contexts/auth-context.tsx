@@ -23,56 +23,11 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 const TOKEN_KEY = 'minhocao_access_token'
 const USER_KEY = 'minhocao_user'
 
-function safeGetItem(key: string): string | null {
-  if (typeof window === 'undefined') return null
-  try {
-    return sessionStorage.getItem(key)
-  } catch {
-    return null
-  }
-}
-
-function safeSetItem(key: string, value: string): void {
-  if (typeof window === 'undefined') return
-  try {
-    sessionStorage.setItem(key, value)
-  } catch {
-    // Ignorar erros de storage
-  }
-}
-
-function safeRemoveItem(key: string): void {
-  if (typeof window === 'undefined') return
-  try {
-    sessionStorage.removeItem(key)
-  } catch {
-    // Ignorar erros de storage
-  }
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [token, setToken] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-
-  // Restaurar sessão do sessionStorage apenas no cliente
-  useEffect(() => {
-    const storedToken = safeGetItem(TOKEN_KEY)
-    const storedUser = safeGetItem(USER_KEY)
-
-    if (storedToken && storedUser) {
-      try {
-        setToken(storedToken)
-        setUser(JSON.parse(storedUser))
-      } catch {
-        // JSON invalido, limpar storage
-        safeRemoveItem(TOKEN_KEY)
-        safeRemoveItem(USER_KEY)
-      }
-    }
-
-    setIsLoading(false)
-  }, [])
+  const [mounted, setMounted] = useState(false)
 
   const login = useCallback(async (email: string, password: string) => {
     const response = await fetch('/api/auth/login', {
@@ -100,8 +55,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(accessToken)
     setUser(userData)
 
-    safeSetItem(TOKEN_KEY, accessToken)
-    safeSetItem(USER_KEY, JSON.stringify(userData))
+    sessionStorage.setItem(TOKEN_KEY, accessToken)
+    sessionStorage.setItem(USER_KEY, JSON.stringify(userData))
   }, [])
 
   const register = useCallback(async (email: string, password: string) => {
@@ -123,9 +78,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     setToken(null)
     setUser(null)
-    safeRemoveItem(TOKEN_KEY)
-    safeRemoveItem(USER_KEY)
+    sessionStorage.removeItem(TOKEN_KEY)
+    sessionStorage.removeItem(USER_KEY)
   }, [])
+
+  // Restaurar sessão do sessionStorage - deve vir após todos os useCallback
+  useEffect(() => {
+    setMounted(true)
+    
+    try {
+      const storedToken = sessionStorage.getItem(TOKEN_KEY)
+      const storedUser = sessionStorage.getItem(USER_KEY)
+
+      if (storedToken && storedUser) {
+        setToken(storedToken)
+        setUser(JSON.parse(storedUser))
+      }
+    } catch {
+      // Ignore errors during SSR or when sessionStorage is unavailable
+    }
+
+    setIsLoading(false)
+  }, [])
+
+  // Prevent hydration mismatch by not rendering children until mounted
+  if (!mounted) {
+    return null
+  }
 
   return (
     <AuthContext.Provider
