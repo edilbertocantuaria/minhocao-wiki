@@ -5,6 +5,7 @@ import { Sparkles } from 'lucide-react'
 import { ChatSidebar, type ChatHistory } from './chat-sidebar'
 import { ChatMessage, type Message } from './chat-message'
 import { ChatInput } from './chat-input'
+import { ParametersPanel } from './parameters-panel'
 import { ThemeToggle } from './theme-toggle'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
@@ -16,6 +17,15 @@ export function ChatInterface() {
   const [isLoading, setIsLoading] = useState(false)
   const [currentChatId, setCurrentChatId] = useState<string | null>(null)
   const [history, setHistory] = useState<ChatHistory[]>([])
+  const [parameters, setParameters] = useState({
+    frequency_penalty: 0,
+    presence_penalty: 0,
+    temperature: 0.7,
+    max_tokens: 1024,
+    n: 1,
+    seed: 0,
+    stop: '',
+  })
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const currentChatIdRef = useRef<string | null>(null)
 
@@ -118,6 +128,7 @@ export function ChatInterface() {
         body: JSON.stringify({
           session_id: chatId,
           question: content,
+          ...parameters,
         }),
       })
 
@@ -215,6 +226,10 @@ export function ChatInterface() {
             <h1 className="font-semibold text-foreground">RAG Chat</h1>
           </div>
           <div className="flex items-center gap-1">
+            <ParametersPanel
+              parameters={parameters}
+              onParametersChange={setParameters}
+            />
             <ThemeToggle />
           </div>
         </header>

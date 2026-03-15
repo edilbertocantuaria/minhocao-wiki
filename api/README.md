@@ -244,7 +244,48 @@ Lá você pode testar o endpoint `/chat`.
 
 ---
 
-# 11. Fazer uma requisição manual
+# 11. Fluxo manual com autenticação
+
+1. Criar conta:
+
+```
+POST /auth/register
+{
+ "email": "usuario1@email.com",
+ "password": "123456"
+}
+```
+
+2. Fazer login e obter token:
+
+```
+POST /auth/login
+{
+ "email": "usuario1@email.com",
+ "password": "123456"
+}
+```
+
+No Swagger (`/docs`), o botao `Authorize` usa o endpoint padrao OAuth2:
+
+```
+POST /auth/token
+Content-Type: application/x-www-form-urlencoded
+username=<email>
+password=<senha>
+```
+
+3. Criar conversa:
+
+```
+POST /conversations
+Authorization: Bearer <TOKEN>
+{
+ "title": "Minha conversa"
+}
+```
+
+4. Enviar pergunta no chat:
 
 Endpoint:
 
@@ -256,9 +297,15 @@ Exemplo de body:
 
 ```
 {
- "session_id": "usuario1",
+ "conversation_id": "<ID_DA_CONVERSA>",
  "question": "Quais cursos existem na UnB?"
 }
+```
+
+Header obrigatório:
+
+```
+Authorization: Bearer <TOKEN>
 ```
 
 Resposta esperada:
