@@ -100,25 +100,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     sessionStorage.removeItem(USER_KEY)
   }, [])
 
-  // Restaurar sessão do sessionStorage - apenas no cliente
-  useEffect(() => {
-    try {
-      if (typeof window !== 'undefined') {
-        const storedToken = sessionStorage.getItem(TOKEN_KEY)
-        const storedUser = sessionStorage.getItem(USER_KEY)
-
-        if (storedToken && storedUser) {
-          setToken(storedToken)
-          setUser(JSON.parse(storedUser))
-        }
-      }
-    } catch {
-      // Ignore errors when sessionStorage is unavailable
-    } finally {
-      setIsLoading(false)
-    }
-  }, [])
-
   return (
     <AuthContext.Provider
       value={{
