@@ -155,17 +155,12 @@ export function ChatInterface() {
     }
   }
 
-  const handleNewChat = async () => {
+  const syncConversationTitle = useCallback(async (conversationId: string) => {
     if (!token) return
 
     try {
       const response = await fetch('/api/conversations', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({ title: null }),
+        headers: { 'Authorization': `Bearer ${token}` },
       })
 
       if (response.status === 401) {
@@ -173,32 +168,37 @@ export function ChatInterface() {
         return
       }
 
-      if (response.ok) {
-        const conversation: APIConversation = await response.json()
-        const newChat: ChatHistory = {
-          id: conversation.id,
-          title: 'Nova conversa',
-          createdAt: new Date(conversation.created_at),
-        }
+      if (!response.ok) return
 
-        setHistory((prev) => [newChat, ...prev])
-        setCurrentChatId(conversation.id)
-        setMessages([])
-        setChatMessages((prev) => ({
-          ...prev,
-          [conversation.id]: [],
-        }))
-      }
+      const conversations: APIConversation[] = await response.json()
+      const target = conversations.find((conv) => conv.id === conversationId)
+      if (!target) return
+
+      setHistory((prev) =>
+        prev.map((chat) =>
+          chat.id === conversationId
+            ? {
+                ...chat,
+                title: target.title || chat.title,
+              }
+            : chat
+        )
+      )
     } catch (error) {
-      console.error('Erro ao criar conversa:', error)
+      console.error('Erro ao sincronizar titulo da conversa:', error)
     }
+  }, [token, logout])
+
+  const handleNewChat = async () => {
+    setCurrentChatId(null)
+    currentChatIdRef.current = null
+    setMessages([])
   }
 
   const handleSelectChat = async (id: string) => {
     setCurrentChatId(id)
     currentChatIdRef.current = id
 
-    // Se já temos as mensagens em cache, usar
     if (chatMessages[id]) {
       setMessages(chatMessages[id])
     } else {
@@ -253,7 +253,7 @@ export function ChatInterface() {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
           },
-          body: JSON.stringify({ title: content.slice(0, 50) }),
+          body: JSON.stringify({ title: null }),
         })
 
         if (response.status === 401) {
@@ -267,7 +267,7 @@ export function ChatInterface() {
 
           const newChat: ChatHistory = {
             id: conversation.id,
-            title: content.slice(0, 30) + (content.length > 30 ? '...' : ''),
+            title: 'Gerando titulo...',
             createdAt: new Date(conversation.created_at),
           }
 
@@ -341,6 +341,8 @@ export function ChatInterface() {
 
         throw new Error(errorMessage)
       }
+
+      await syncConversationTitle(chatId)
 
       if (!response.body) {
         throw new Error('A API nao retornou corpo de resposta.')

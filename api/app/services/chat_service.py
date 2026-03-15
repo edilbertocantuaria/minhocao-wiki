@@ -1,8 +1,32 @@
 from app.rag_chain import build_rag
+from app.prompts import QUESTION_TITLE
 from app.utils import format_document_title
 from app.web_search import get_web_context
 
 retriever, rewrite_llm, answer_llm, rewrite_prompt, answer_prompt = build_rag()
+
+
+def generate_conversation_title(question: str) -> str:
+    normalized = " ".join(question.strip().split())
+    if not normalized:
+        return "Nova conversa"
+
+    try:
+        prompt = QUESTION_TITLE.format(question=normalized)
+        response = rewrite_llm.invoke(prompt)
+        title = " ".join((response.content or "").strip().split())
+
+        if not title:
+            raise ValueError("Empty title returned by LLM")
+
+        words = title.split()
+        if len(words) > 10:
+            title = " ".join(words[:10])
+
+        return title[:80].strip()
+    except Exception:
+        fallback = normalized[:77].rstrip()
+        return fallback + "..." if len(normalized) > 80 else fallback
 
 
 def process_internal_docs(docs):

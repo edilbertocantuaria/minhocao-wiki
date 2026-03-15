@@ -7,8 +7,13 @@ from app.dependencies import get_current_user
 from app.logger import log_query
 from app.models import User
 from app.schemas import ChatRequest
-from app.services.chat_service import answer_llm, build_chain_input, build_history_str
-from app.services.conversation_service import get_conversation_for_user, list_messages, save_message
+from app.services.chat_service import answer_llm, build_chain_input, build_history_str, generate_conversation_title
+from app.services.conversation_service import (
+    get_conversation_for_user,
+    list_messages,
+    save_message,
+    update_conversation_title,
+)
 
 router = APIRouter(tags=["chat"])
 
@@ -31,6 +36,14 @@ async def chat(
     history_str = build_history_str(
         [{"role": message.role, "content": message.content} for message in history]
     )
+
+    current_title = (conversation.title or "").strip().lower()
+    if current_title in {"", "conversa sem titulo", "conversa sem título", "untitled conversation"}:
+        update_conversation_title(
+            db=db,
+            conversation=conversation,
+            title=generate_conversation_title(payload.question),
+        )
 
     save_message(db=db, conversation_id=conversation.id, role="user", content=payload.question)
     chain_input, sources = build_chain_input(question=payload.question, history_str=history_str)

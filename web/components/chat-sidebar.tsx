@@ -5,6 +5,7 @@ import { PanelLeftClose, PanelLeft, Plus, MessageSquare, Trash2 } from 'lucide-r
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Spinner } from '@/components/ui/spinner'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -128,7 +129,14 @@ export function ChatSidebar({
                   onMouseLeave={() => setHoveredId(null)}
                 >
                   <MessageSquare className="size-4 shrink-0" />
-                  <span className="truncate flex-1">{chat.title}</span>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="truncate flex-1">{chat.title}</span>
+                    </TooltipTrigger>
+                    <TooltipContent side="right" sideOffset={8} className="max-w-80 break-words">
+                      {chat.title}
+                    </TooltipContent>
+                  </Tooltip>
                   {(hoveredId === chat.id || currentChatId === chat.id) && (
                     <AlertDialog>
                       <AlertDialogTrigger asChild>

@@ -3,6 +3,17 @@ from sqlalchemy.orm import Session
 from app.models import Conversation, Message
 
 
+def summarize_conversation_title(question: str, max_length: int = 72) -> str:
+    normalized = " ".join(question.strip().split())
+    if not normalized:
+        return "Nova conversa"
+
+    if len(normalized) <= max_length:
+        return normalized
+
+    return normalized[: max_length - 3].rstrip() + "..."
+
+
 def create_conversation(db: Session, user_id: str, title: str | None = None) -> Conversation:
     conversation = Conversation(user_id=user_id, title=title)
     db.add(conversation)
@@ -31,6 +42,14 @@ def get_conversation_for_user(db: Session, conversation_id: str, user_id: str) -
 def delete_conversation(db: Session, conversation: Conversation) -> None:
     db.delete(conversation)
     db.commit()
+
+
+def update_conversation_title(db: Session, conversation: Conversation, title: str) -> Conversation:
+    conversation.title = title
+    db.add(conversation)
+    db.commit()
+    db.refresh(conversation)
+    return conversation
 
 
 def list_messages(db: Session, conversation_id: str) -> list[Message]:
