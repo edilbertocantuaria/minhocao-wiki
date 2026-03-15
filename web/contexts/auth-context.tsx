@@ -27,19 +27,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [token, setToken] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [mounted, setMounted] = useState(false)
 
   // Restaurar sessão do sessionStorage
   useEffect(() => {
-    const storedToken = sessionStorage.getItem(TOKEN_KEY)
-    const storedUser = sessionStorage.getItem(USER_KEY)
+    setMounted(true)
+    
+    try {
+      const storedToken = sessionStorage.getItem(TOKEN_KEY)
+      const storedUser = sessionStorage.getItem(USER_KEY)
 
-    if (storedToken && storedUser) {
-      setToken(storedToken)
-      setUser(JSON.parse(storedUser))
+      if (storedToken && storedUser) {
+        setToken(storedToken)
+        setUser(JSON.parse(storedUser))
+      }
+    } catch {
+      // Ignore errors during SSR or when sessionStorage is unavailable
     }
 
     setIsLoading(false)
   }, [])
+
+  // Prevent hydration mismatch by not rendering children until mounted
+  if (!mounted) {
+    return null
+  }
 
   const login = useCallback(async (email: string, password: string) => {
     const response = await fetch('/api/auth/login', {
