@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { ThemeProvider } from '@/components/theme-provider'
+import { AuthProvider } from '@/contexts/auth-context'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import './globals.css'
 
@@ -45,9 +46,11 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <TooltipProvider delayDuration={100}>
-            {children}
-          </TooltipProvider>
+          <AuthProvider>
+            <TooltipProvider delayDuration={100}>
+              {children}
+            </TooltipProvider>
+          </AuthProvider>
         </ThemeProvider>
         <Analytics />
       </body>
