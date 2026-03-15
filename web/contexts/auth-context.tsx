@@ -27,7 +27,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [token, setToken] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [mounted, setMounted] = useState(false)
+
+  // Restaurar sessão do sessionStorage - apenas no cliente
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const storedToken = sessionStorage.getItem(TOKEN_KEY)
+        const storedUser = sessionStorage.getItem(USER_KEY)
+
+        if (storedToken && storedUser) {
+          setToken(storedToken)
+          setUser(JSON.parse(storedUser))
+        }
+      }
+    } catch {
+      // Ignore errors when sessionStorage is unavailable
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
 
   const login = useCallback(async (email: string, password: string) => {
     const response = await fetch('/api/auth/login', {
@@ -82,29 +100,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     sessionStorage.removeItem(USER_KEY)
   }, [])
 
-  // Restaurar sessão do sessionStorage - deve vir após todos os useCallback
+  // Restaurar sessão do sessionStorage - apenas no cliente
   useEffect(() => {
-    setMounted(true)
-    
     try {
-      const storedToken = sessionStorage.getItem(TOKEN_KEY)
-      const storedUser = sessionStorage.getItem(USER_KEY)
+      if (typeof window !== 'undefined') {
+        const storedToken = sessionStorage.getItem(TOKEN_KEY)
+        const storedUser = sessionStorage.getItem(USER_KEY)
 
-      if (storedToken && storedUser) {
-        setToken(storedToken)
-        setUser(JSON.parse(storedUser))
+        if (storedToken && storedUser) {
+          setToken(storedToken)
+          setUser(JSON.parse(storedUser))
+        }
       }
     } catch {
-      // Ignore errors during SSR or when sessionStorage is unavailable
+      // Ignore errors when sessionStorage is unavailable
+    } finally {
+      setIsLoading(false)
     }
-
-    setIsLoading(false)
   }, [])
-
-  // Prevent hydration mismatch by not rendering children until mounted
-  if (!mounted) {
-    return null
-  }
 
   return (
     <AuthContext.Provider
