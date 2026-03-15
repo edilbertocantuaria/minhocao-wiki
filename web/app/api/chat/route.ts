@@ -4,8 +4,13 @@ function getApiBaseUrl() {
   return (process.env.API_BASE_URL || DEFAULT_API_BASE_URL).replace(/\/$/, '')
 }
 
+function getAuthHeader(request: Request) {
+  return request.headers.get('Authorization') || ''
+}
+
 export async function POST(request: Request) {
   let payload: unknown
+  const authHeader = getAuthHeader(request)
 
   try {
     payload = await request.json()
@@ -17,6 +22,7 @@ export async function POST(request: Request) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'Authorization': authHeader,
     },
     body: JSON.stringify(payload),
     cache: 'no-store',

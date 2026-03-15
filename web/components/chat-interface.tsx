@@ -1,20 +1,41 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
-import { Sparkles } from 'lucide-react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
+import { Sparkles, LogOut } from 'lucide-react'
+import { useAuth } from '@/contexts/auth-context'
 import { ChatSidebar, type ChatHistory } from './chat-sidebar'
 import { ChatMessage, type Message } from './chat-message'
 import { ChatInput } from './chat-input'
 import { ParametersPanel } from './parameters-panel'
 import { ThemeToggle } from './theme-toggle'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Button } from '@/components/ui/button'
+import { Spinner } from '@/components/ui/spinner'
 import { cn } from '@/lib/utils'
 
+interface APIMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  created_at: string
+}
+
+interface APIConversation {
+  id: string
+  title: string | null
+  created_at: string
+}
+
 export function ChatInterface() {
+  const router = useRouter()
+  const { token, isLoading: authLoading, isAuthenticated, logout, user } = useAuth()
+
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [messages, setMessages] = useState<Message[]>([])
   const [chatMessages, setChatMessages] = useState<Record<string, Message[]>>({})
   const [isLoading, setIsLoading] = useState(false)
+  const [isLoadingConversations, setIsLoadingConversations] = useState(true)
   const [currentChatId, setCurrentChatId] = useState<string | null>(null)
   const [history, setHistory] = useState<ChatHistory[]>([])
   const [parameters, setParameters] = useState({
@@ -41,6 +62,88 @@ export function ChatInterface() {
     currentChatIdRef.current = currentChatId
   }, [currentChatId])
 
+  // Redirecionar para login se não autenticado
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.push('/login')
+    }
+  }, [authLoading, isAuthenticated, router])
+
+  // Carregar conversas do backend
+  const loadConversations = useCallback(async () => {
+    if (!token) return
+
+    setIsLoadingConversations(true)
+
+    try {
+      const response = await fetch('/api/conversations', {
+        headers: { 'Authorization': `Bearer ${token}` },
+      })
+
+      if (response.status === 401) {
+        logout()
+        return
+      }
+
+      if (response.ok) {
+        const conversations: APIConversation[] = await response.json()
+        setHistory(
+          conversations.map((conv) => ({
+            id: conv.id,
+            title: conv.title || 'Conversa sem titulo',
+            createdAt: new Date(conv.created_at),
+          }))
+        )
+      }
+    } catch (error) {
+      console.error('Erro ao carregar conversas:', error)
+    } finally {
+      setIsLoadingConversations(false)
+    }
+  }, [token, logout])
+
+  useEffect(() => {
+    if (isAuthenticated && token) {
+      loadConversations()
+    }
+  }, [isAuthenticated, token, loadConversations])
+
+  // Carregar mensagens de uma conversa
+  const loadMessages = useCallback(async (conversationId: string) => {
+    if (!token) return
+
+    try {
+      const response = await fetch(`/api/conversations/${conversationId}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      })
+
+      if (response.status === 401) {
+        logout()
+        return
+      }
+
+      if (response.ok) {
+        const apiMessages: APIMessage[] = await response.json()
+        const formattedMessages: Message[] = apiMessages.map((msg) => ({
+          id: msg.id,
+          role: msg.role,
+          content: msg.content,
+        }))
+
+        setChatMessages((prev) => ({
+          ...prev,
+          [conversationId]: formattedMessages,
+        }))
+
+        if (currentChatIdRef.current === conversationId) {
+          setMessages(formattedMessages)
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao carregar mensagens:', error)
+    }
+  }, [token, logout])
+
   const syncMessagesForChat = (chatId: string, nextMessages: Message[]) => {
     setChatMessages((prev) => ({
       ...prev,
@@ -52,53 +155,135 @@ export function ChatInterface() {
     }
   }
 
-  const handleNewChat = () => {
-    const newId = Date.now().toString()
-    setCurrentChatId(newId)
-    setMessages([])
-    setChatMessages((prev) => ({
-      ...prev,
-      [newId]: [],
-    }))
+  const handleNewChat = async () => {
+    if (!token) return
+
+    try {
+      const response = await fetch('/api/conversations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ title: null }),
+      })
+
+      if (response.status === 401) {
+        logout()
+        return
+      }
+
+      if (response.ok) {
+        const conversation: APIConversation = await response.json()
+        const newChat: ChatHistory = {
+          id: conversation.id,
+          title: 'Nova conversa',
+          createdAt: new Date(conversation.created_at),
+        }
+
+        setHistory((prev) => [newChat, ...prev])
+        setCurrentChatId(conversation.id)
+        setMessages([])
+        setChatMessages((prev) => ({
+          ...prev,
+          [conversation.id]: [],
+        }))
+      }
+    } catch (error) {
+      console.error('Erro ao criar conversa:', error)
+    }
   }
 
-  const handleSelectChat = (id: string) => {
+  const handleSelectChat = async (id: string) => {
     setCurrentChatId(id)
-    setMessages(chatMessages[id] ?? [])
+    currentChatIdRef.current = id
+
+    // Se já temos as mensagens em cache, usar
+    if (chatMessages[id]) {
+      setMessages(chatMessages[id])
+    } else {
+      setMessages([])
+      await loadMessages(id)
+    }
   }
 
-  const handleDeleteChat = (id: string) => {
-    setHistory((prev) => prev.filter((chat) => chat.id !== id))
-    setChatMessages((prev) => {
-      const nextState = { ...prev }
-      delete nextState[id]
-      return nextState
-    })
+  const handleDeleteChat = async (id: string) => {
+    if (!token) return
 
-    if (currentChatId === id) {
-      setCurrentChatId(null)
-      setMessages([])
+    try {
+      const response = await fetch(`/api/conversations/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` },
+      })
+
+      if (response.status === 401) {
+        logout()
+        return
+      }
+
+      if (response.ok || response.status === 204) {
+        setHistory((prev) => prev.filter((chat) => chat.id !== id))
+        setChatMessages((prev) => {
+          const nextState = { ...prev }
+          delete nextState[id]
+          return nextState
+        })
+
+        if (currentChatId === id) {
+          setCurrentChatId(null)
+          setMessages([])
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao deletar conversa:', error)
     }
   }
 
   const handleSendMessage = async (content: string) => {
-    const chatId = currentChatId || Date.now().toString()
+    if (!token) return
+
+    let chatId = currentChatId
+
+    // Se não há conversa atual, criar uma nova
+    if (!chatId) {
+      try {
+        const response = await fetch('/api/conversations', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({ title: content.slice(0, 50) }),
+        })
+
+        if (response.status === 401) {
+          logout()
+          return
+        }
+
+        if (response.ok) {
+          const conversation: APIConversation = await response.json()
+          chatId = conversation.id
+
+          const newChat: ChatHistory = {
+            id: conversation.id,
+            title: content.slice(0, 30) + (content.length > 30 ? '...' : ''),
+            createdAt: new Date(conversation.created_at),
+          }
+
+          setHistory((prev) => [newChat, ...prev])
+          setCurrentChatId(chatId)
+          currentChatIdRef.current = chatId
+        } else {
+          throw new Error('Erro ao criar conversa')
+        }
+      } catch (error) {
+        console.error('Erro ao criar conversa:', error)
+        return
+      }
+    }
+
     const existingMessages = chatMessages[chatId] ?? []
-
-    if (!currentChatId) {
-      setCurrentChatId(chatId)
-    }
-
-    if (!history.find((chat) => chat.id === chatId)) {
-      setHistory((prev) => [
-        {
-          id: chatId,
-          title: content.slice(0, 30) + (content.length > 30 ? '...' : ''),
-          createdAt: new Date(),
-        },
-        ...prev,
-      ])
-    }
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -115,7 +300,6 @@ export function ChatInterface() {
 
     const nextMessages = [...existingMessages, userMessage, assistantPlaceholder]
 
-    currentChatIdRef.current = chatId
     syncMessagesForChat(chatId, nextMessages)
     setIsLoading(true)
 
@@ -124,21 +308,29 @@ export function ChatInterface() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
-          session_id: chatId,
+          conversation_id: chatId,
           question: content,
           ...parameters,
         }),
       })
 
+      if (response.status === 401) {
+        logout()
+        return
+      }
+
       if (!response.ok) {
         let errorMessage = 'Nao foi possivel obter resposta da API.'
 
         try {
-          const errorPayload = (await response.json()) as { error?: string }
+          const errorPayload = (await response.json()) as { error?: string; detail?: string }
           if (errorPayload.error) {
             errorMessage = errorPayload.error
+          } else if (errorPayload.detail) {
+            errorMessage = errorPayload.detail
           }
         } catch {
           const fallbackText = await response.text()
@@ -198,6 +390,25 @@ export function ChatInterface() {
     }
   }
 
+  const handleLogout = () => {
+    logout()
+    router.push('/login')
+  }
+
+  // Loading screen
+  if (authLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <Spinner className="size-8" />
+      </div>
+    )
+  }
+
+  // Se não está autenticado, não renderizar nada (será redirecionado)
+  if (!isAuthenticated) {
+    return null
+  }
+
   return (
     <div className="flex h-screen bg-background">
       {/* Sidebar */}
@@ -209,6 +420,7 @@ export function ChatInterface() {
         onSelectChat={handleSelectChat}
         onNewChat={handleNewChat}
         onDeleteChat={handleDeleteChat}
+        isLoading={isLoadingConversations}
       />
 
       {/* Main Content */}
@@ -223,14 +435,28 @@ export function ChatInterface() {
           <div className="flex items-center gap-2">
             {!sidebarOpen && <div className="w-10" />}
             <Sparkles className="size-5 text-primary" />
-            <h1 className="font-semibold text-foreground">RAG Chat</h1>
+            <h1 className="font-semibold text-foreground">Minhocao Wiki</h1>
           </div>
           <div className="flex items-center gap-1">
+            {user?.email && (
+              <span className="text-sm text-muted-foreground mr-2 hidden sm:inline">
+                {user.email}
+              </span>
+            )}
             <ParametersPanel
               parameters={parameters}
               onParametersChange={setParameters}
             />
             <ThemeToggle />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleLogout}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <LogOut className="size-5" />
+              <span className="sr-only">Sair</span>
+            </Button>
           </div>
         </header>
 
@@ -243,11 +469,10 @@ export function ChatInterface() {
                   <Sparkles className="size-8 text-primary" />
                 </div>
                 <h2 className="text-2xl font-semibold text-foreground text-center text-balance">
-                  Como posso ajudar você hoje?
+                  Como posso ajudar voce hoje?
                 </h2>
                 <p className="text-muted-foreground text-center max-w-md text-balance">
-                  Faça uma pergunta ou inicie uma conversa para consultar a API
-                  RAG conectada ao backend local.
+                  Faca uma pergunta sobre o Minhocao e eu responderei com base nos documentos disponiveis.
                 </p>
               </div>
             ) : (
