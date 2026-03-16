@@ -24,6 +24,7 @@ services:
     depends_on:
       - db
     restart: unless-stopped
+
   api:
     build:
       context: ./api
@@ -37,6 +38,33 @@ services:
       - ./api/config.yaml:/app/config.yaml:ro
       - ./api/docs:/app/docs
       - ./api/logs:/app/logs
+    depends_on:
+      - db
+    restart: unless-stopped
+
+  ingest-worker:
+    build:
+      context: ./api
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        while true; do
+          echo "[ingest-worker] starting ingestion at $(date '+%Y-%m-%d %H:%M:%S')";
+          python ingestion/ingest_documents.py;
+          echo "[ingest-worker] next run in ${INGEST_INTERVAL_SECONDS:-7200}s";
+          sleep "${INGEST_INTERVAL_SECONDS:-7200}";
+        done
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-postgresql+psycopg2://postgres:postgres@db:5432/minhocao_wiki}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - INGEST_INTERVAL_SECONDS=${INGEST_INTERVAL_SECONDS:-7200}
+    volumes:
+      - ./api/config.yaml:/app/config.yaml:ro
+      - ./api/docs:/app/docs
+      - ./api/logs:/app/logs
+      - ./api/unb.zip:/app/unb.zip:ro
     depends_on:
       - db
     restart: unless-stopped

@@ -50,7 +50,7 @@ API_BASE_URL=http://localhost:8000
 NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
 ```
 
-Observacao:
+Observação:
 
 - Em Docker, `NEXT_PUBLIC_GOOGLE_CLIENT_ID` entra no build via `ARG` no `Dockerfile` e `docker-compose.yml`.
 

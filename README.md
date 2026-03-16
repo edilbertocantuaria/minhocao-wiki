@@ -79,7 +79,15 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-5. Acesse:
+5. A API sobe imediatamente e a ingestao roda em paralelo no servico `ingest-worker` a cada 2 horas.
+
+Para acompanhar:
+
+```bash
+docker compose logs -f ingest-worker
+```
+
+6. Acesse:
 
 - Web: `http://localhost:3000`
 - API Swagger: `http://localhost:8000/docs`
@@ -93,7 +101,7 @@ Arquivo: `.env`
 - `JWT_SECRET_KEY`: segredo para assinar JWT.
 - `GOOGLE_CLIENT_ID`: client id OAuth usado pela API e pelo build do web.
 
-Observacao importante:
+Observação importante:
 
 - `NEXT_PUBLIC_GOOGLE_CLIENT_ID` no frontend e injetado no build via `docker-compose.yml` com valor de `GOOGLE_CLIENT_ID`.
 - Nunca commitar `.env`.
@@ -121,6 +129,8 @@ Comando (a partir de `api/`):
 ```bash
 python ingestion/ingest_documents.py
 ```
+
+No Docker Compose, a ingestao ocorre de forma assincrona no servico `ingest-worker` (padrao: a cada 2h), sem bloquear a API.
 
 ## Documentacao por Modulo
 

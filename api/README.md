@@ -99,7 +99,25 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 No root do projeto:
 
 ```bash
-docker compose up -d --build api db
+docker compose up -d --build
+```
+
+Nesse fluxo, a ingestao e executada automaticamente no startup do container da API, antes do Uvicorn.
+
+Agora a ingestao roda em paralelo no servico `ingest-worker` e a API permanece disponivel durante as atualizacoes.
+
+Intervalo padrao do worker: 2 horas (`INGEST_INTERVAL_SECONDS=7200`).
+
+Para alterar o intervalo (exemplo 1 hora):
+
+```bash
+INGEST_INTERVAL_SECONDS=3600 docker compose up -d --build
+```
+
+Para acompanhar o progresso da ingestao em tempo real:
+
+```bash
+docker compose logs -f ingest-worker
 ```
 
 ## Ingestao de Documentos
@@ -112,6 +130,32 @@ python ingestion/ingest_documents.py
 ```
 
 Esse processo prepara o indice vetorial e registra auditoria em `api/logs/`.
+
+Comportamento incremental (padrao):
+
+- Novo documento: adiciona vetores do novo PDF.
+- Documento atualizado: remove vetores antigos desse arquivo e indexa novamente.
+- Documento removido: remove vetores desse arquivo do Pinecone.
+- Documento inalterado: nao reprocessa.
+- Se `api/docs/unb` ja existir com arquivos, a ingestao reutiliza a pasta descompactada para evitar sobreposicao.
+
+Estado da ingestao:
+
+- Manifesto salvo em `api/logs/ingestion_manifest.json`.
+- Auditoria em `api/logs/ingestion_audit_latest.json` e `api/logs/ingestion_audit.jsonl`.
+- Resumo textual em `api/logs/ingestion_YYYYMMDD_HHMMSS.txt`.
+
+Para forcar rebuild completo do indice (apaga e recria):
+
+```bash
+INGEST_FORCE_RECREATE_INDEX=true python ingestion/ingest_documents.py
+```
+
+Para forcar reextracao do ZIP mesmo com pasta ja descompactada:
+
+```bash
+INGEST_FORCE_EXTRACT=true python ingestion/ingest_documents.py
+```
 
 ## Testes
 

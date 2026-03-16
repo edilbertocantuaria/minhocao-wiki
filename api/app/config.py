@@ -1,8 +1,11 @@
 import os
+from pathlib import Path
 import yaml
 from pinecone import Pinecone
 
-with open("config.yaml", "r") as f:
+CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.yaml"
+
+with CONFIG_PATH.open("r", encoding="utf-8") as f:
     config = yaml.safe_load(f) or {}
 
 

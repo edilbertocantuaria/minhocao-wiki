@@ -471,10 +471,10 @@ export function ChatInterface() {
                 </div> */}
                 <img src="/minhocao_wiki.png" alt="Minhocão Wiki" className="size-45" />
                 <h2 className="text-2xl font-semibold text-foreground text-center text-balance">
-                  Como posso ajudar voce hoje?
+                  Como posso ajudar você hoje?
                 </h2>
                 <p className="text-muted-foreground text-center max-w-md text-balance">
-                  Faca uma pergunta sobre a Unb e eu responderei com base nos documentos disponiveis.
+                  Faça uma pergunta sobre a UnB e eu responderei com base nos documentos disponíveis.
                 </p>
               </div>
             ) : (

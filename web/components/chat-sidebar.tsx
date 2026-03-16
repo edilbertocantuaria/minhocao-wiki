@@ -78,7 +78,7 @@ export function ChatSidebar({
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-sidebar-border">
-          <h2 className="font-semibold text-sidebar-foreground">Historico</h2>
+          <h2 className="font-semibold text-sidebar-foreground">Histórico</h2>
           <Button
             variant="ghost"
             size="icon"
@@ -169,7 +169,7 @@ export function ChatSidebar({
                       <AlertDialogHeader>
                         <AlertDialogTitle>Excluir conversa</AlertDialogTitle>
                         <AlertDialogDescription>
-                          Tem certeza que deseja excluir esta conversa? Esta acao nao pode ser desfeita e todas as mensagens serao perdidas.
+                          Tem certeza que deseja excluir esta conversa? Esta ação nao pode ser desfeita e todas as mensagens serão perdidas.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
