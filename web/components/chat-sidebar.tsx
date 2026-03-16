@@ -46,7 +46,6 @@ export function ChatSidebar({
   onDeleteChat,
   isLoading = false,
 }: ChatSidebarProps) {
-  const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const handleDelete = async (id: string) => {
@@ -119,61 +118,71 @@ export function ChatSidebar({
                 <div
                   key={chat.id}
                   className={cn(
-                    'group flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors cursor-pointer',
+                    'group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors cursor-pointer',
                     currentChatId === chat.id
                       ? 'bg-sidebar-accent text-sidebar-accent-foreground'
                       : 'text-sidebar-foreground hover:bg-sidebar-accent/50'
                   )}
                   onClick={() => onSelectChat(chat.id)}
-                  onMouseEnter={() => setHoveredId(chat.id)}
-                  onMouseLeave={() => setHoveredId(null)}
                 >
                   <MessageSquare className="size-4 shrink-0" />
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="truncate flex-1">{chat.title}</span>
-                    </TooltipTrigger>
-                    <TooltipContent side="right" sideOffset={8} className="max-w-80 break-words">
-                      {chat.title}
-                    </TooltipContent>
-                  </Tooltip>
-                  {(hoveredId === chat.id || currentChatId === chat.id) && (
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-6 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive shrink-0"
-                          onClick={(e) => e.stopPropagation()}
-                          disabled={deletingId === chat.id}
+                  <div className="min-w-0 flex-1 pr-2 overflow-hidden">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="block truncate whitespace-nowrap">
+                          {chat.title.length > 20 ? `${chat.title.slice(0, 20)}...` : chat.title}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent
+                        side="top"
+                        align="start"
+                        sideOffset={6}
+                        className="max-w-80 break-words"
+                      >
+                        {chat.title}
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={cn(
+                          'size-6 shrink-0 flex-none text-muted-foreground hover:text-destructive transition-opacity relative z-10',
+                          currentChatId === chat.id
+                            ? 'opacity-100'
+                            : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100'
+                        )}
+                        onClick={(e) => e.stopPropagation()}
+                        disabled={deletingId === chat.id}
+                      >
+                        {deletingId === chat.id ? (
+                          <Spinner className="size-3" />
+                        ) : (
+                          <Trash2 className="size-3" />
+                        )}
+                        <span className="sr-only">Excluir conversa</span>
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Excluir conversa</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Tem certeza que deseja excluir esta conversa? Esta acao nao pode ser desfeita e todas as mensagens serao perdidas.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => handleDelete(chat.id)}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                         >
-                          {deletingId === chat.id ? (
-                            <Spinner className="size-3" />
-                          ) : (
-                            <Trash2 className="size-3" />
-                          )}
-                          <span className="sr-only">Excluir conversa</span>
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent onClick={(e) => e.stopPropagation()}>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Excluir conversa</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Tem certeza que deseja excluir esta conversa? Esta acao nao pode ser desfeita e todas as mensagens serao perdidas.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => handleDelete(chat.id)}
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                          >
-                            Excluir
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  )}
+                          Excluir
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
               ))
             )}
