@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.responses import PlainTextResponse
 
 from app.database import init_db
 from app.routers.auth import router as auth_router
@@ -27,3 +28,8 @@ def on_startup() -> None:
 app.include_router(auth_router)
 app.include_router(conversations_router)
 app.include_router(chat_router)
+
+
+@app.get("/health", tags=["health"], response_class=PlainTextResponse)
+def health() -> str:
+    return "The API is working!"

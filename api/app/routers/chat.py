@@ -18,6 +18,21 @@ from app.services.conversation_service import (
 router = APIRouter(tags=["chat"])
 
 
+def _format_sources_block(sources: list[str]) -> str:
+    unique_sources: list[str] = []
+    for source in sources:
+        normalized = source.strip()
+        if normalized and normalized not in unique_sources:
+            unique_sources.append(normalized)
+
+    if not unique_sources:
+        return ""
+
+    lines = ["", "", "Fonte:"]
+    lines.extend(f"- {source}" for source in unique_sources)
+    return "\n".join(lines)
+
+
 @router.post("/chat")
 async def chat(
     payload: ChatRequest,
@@ -69,6 +84,11 @@ async def chat(
             if chunk.content:
                 full_answer += chunk.content
                 yield chunk.content
+
+        sources_block = _format_sources_block(sources)
+        if sources_block:
+            full_answer += sources_block
+            yield sources_block
 
         if conversation is not None:
             save_message(db=db, conversation_id=conversation.id, role="assistant", content=full_answer)

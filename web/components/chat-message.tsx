@@ -70,7 +70,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
         {isUser ? (
           <>
             <p className="text-sm font-medium text-foreground">Você</p>
-            <div className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
+            <div className="text-sm text-foreground/90 whitespace-pre-wrap break-words [overflow-wrap:anywhere] leading-relaxed">
               {message.content}
             </div>
           </>
@@ -98,7 +98,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
                 <span className="size-2 rounded-full bg-muted-foreground/50 animate-bounce [animation-delay:300ms]" />
               </div>
             ) : (
-              <div className="text-sm text-foreground/90 leading-relaxed [&_a]:text-primary [&_a]:underline [&_code]:rounded [&_code]:bg-background/80 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.9em] [&_li]:ml-5 [&_li]:list-disc [&_ol]:ml-5 [&_ol]:list-decimal [&_p:not(:first-child)]:mt-3 [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:bg-background/80 [&_pre]:p-4 [&_pre]:text-xs [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_ul]:ml-5 [&_ul]:list-disc [&_ul:not(:first-child)]:mt-3">
+              <div className="text-sm text-foreground/90 leading-relaxed break-words [overflow-wrap:anywhere] [&_a]:break-all [&_a]:text-primary [&_a]:underline [&_code]:rounded [&_code]:bg-background/80 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.9em] [&_li]:ml-5 [&_li]:list-disc [&_li]:break-words [&_ol]:ml-5 [&_ol]:list-decimal [&_p]:break-words [&_p:not(:first-child)]:mt-3 [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:bg-background/80 [&_pre]:p-4 [&_pre]:text-xs [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_ul]:ml-5 [&_ul]:list-disc [&_ul:not(:first-child)]:mt-3">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
