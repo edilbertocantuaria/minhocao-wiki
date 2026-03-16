@@ -145,7 +145,7 @@ def ingest():
     processing_paths = [Path(path) / source_file for source_file in files_to_process]
     print(f"[PROCESS] {len(processing_paths)} arquivo(s) para ingestão")
 
-    documents, failed_files, loaded_files = load_documents(processing_paths, path)
+    documents, failed_files, file_statuses = load_documents(processing_paths, path)
     print(f"[LOAD] Páginas válidas carregadas: {len(documents)}")
     stage += 1
 
@@ -179,13 +179,19 @@ def ingest():
         if source_file not in changes["removed"]
     }
 
-    for source_file in loaded_files:
+    for source_file, status in file_statuses.items():
         if source_file in current_manifest:
-            next_manifest[source_file] = current_manifest[source_file]
+            next_manifest[source_file] = {
+                **current_manifest[source_file],
+                **status,
+            }
 
     for source_file in changes["unchanged"]:
         if source_file in current_manifest:
-            next_manifest[source_file] = current_manifest[source_file]
+            next_manifest[source_file] = {
+                **previous_manifest.get(source_file, {}),
+                **current_manifest[source_file],
+            }
 
     save_manifest(next_manifest)
 
@@ -205,6 +211,7 @@ def ingest():
         files_to_process=files_to_process,
         files_to_delete=files_to_delete,
         index_name=INDEX_NAME,
+        effective_manifest=next_manifest,
     )
 
     log_ingestion_audit(audit_report)

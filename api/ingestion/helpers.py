@@ -312,7 +312,7 @@ def build_source_title(file_path):
 def load_documents(pdf_paths, root_folder):
     documents = []
     failed_files = []
-    loaded_files = set()
+    file_statuses = {}
 
     total_files = len(pdf_paths)
 
@@ -340,19 +340,26 @@ def load_documents(pdf_paths, root_folder):
         source = build_source_title(file_path)
         source_file = to_posix_relative(file_path, root_folder)
         source_path = str(Path(file_path).resolve())
-        loaded_files.add(source_file)
+        had_extractable_text = False
 
         for doc in pages:
             text = (doc.page_content or "").strip()
 
             if text:
+                had_extractable_text = True
                 doc.page_content = " ".join(text.split())
                 doc.metadata["source"] = source
                 doc.metadata["source_file"] = source_file
                 doc.metadata["source_path"] = source_path
                 documents.append(doc)
 
-    return documents, failed_files, loaded_files
+        file_statuses[source_file] = {
+            "source": source,
+            "source_path": source_path,
+            "had_extractable_text": had_extractable_text,
+        }
+
+    return documents, failed_files, file_statuses
 
 
 def summarize_pinecone_namespaces(index_stats):
@@ -380,30 +387,29 @@ def build_ingestion_audit(
     files_to_process,
     files_to_delete,
     index_name,
+    effective_manifest,
 ):
     discovered_files = [to_posix_relative(path, extracted_folder) for path in pdf_paths]
     expected_files = {normalize_path(path) for path in pdf_paths}
 
     used_files = sorted(
-        {
-            doc.metadata.get("source_file", "unknown")
-            for doc in documents
-            if doc.metadata.get("source_file")
-        }
+        source_file
+        for source_file, metadata in effective_manifest.items()
+        if metadata.get("had_extractable_text")
     )
 
     used_sources = sorted(
         {
-            doc.metadata.get("source", "unknown")
-            for doc in documents
-            if doc.metadata.get("source")
+            metadata.get("source", "unknown")
+            for metadata in effective_manifest.values()
+            if metadata.get("had_extractable_text") and metadata.get("source")
         }
     )
 
     used_file_paths = {
-        normalize_path(doc.metadata["source_path"])
-        for doc in documents
-        if doc.metadata.get("source_path")
+        normalize_path(metadata["source_path"])
+        for metadata in effective_manifest.values()
+        if metadata.get("had_extractable_text") and metadata.get("source_path")
     }
 
     failed_file_paths = {
@@ -417,13 +423,18 @@ def build_ingestion_audit(
         normalize_path(source_path)
         for source_path in chunk_file_paths
         if source_path != "unknown"
-    }
+    } or used_file_paths
 
     skipped_no_text_files = sorted(
         discovered_file
         for discovered_file in discovered_files
-        if normalize_path(Path(extracted_folder) / discovered_file) not in used_file_paths
+        if effective_manifest.get(discovered_file, {}).get("had_extractable_text") is False
         and normalize_path(Path(extracted_folder) / discovered_file) not in failed_file_paths
+    )
+    not_reprocessed_files = sorted(
+        source_file
+        for source_file in changes["unchanged"]
+        if effective_manifest.get(source_file, {}).get("had_extractable_text") is True
     )
 
     missing_in_documents = sorted(
@@ -483,6 +494,7 @@ def build_ingestion_audit(
             "total_chunks": len(chunks),
             "files_skipped_no_text": len(skipped_no_text_files),
             "files_with_loader_errors": len(failed_files),
+            "files_not_reprocessed": len(not_reprocessed_files),
             "missing_in_documents": len(missing_in_documents),
             "missing_in_chunks": len(missing_in_chunks),
             "loaded_without_chunks": len(docs_without_chunks),
@@ -495,6 +507,7 @@ def build_ingestion_audit(
             "discovered": discovered_files,
             "used": used_files,
             "used_sources": used_sources,
+            "not_reprocessed": not_reprocessed_files,
             "skipped_no_text": skipped_no_text_files,
             "missing_in_documents": missing_in_documents,
             "missing_in_chunks": missing_in_chunks,
@@ -515,15 +528,16 @@ def print_audit_summary(audit_report):
     lines = [
         f"ZIP extracted to: {audit_report['extracted_folder']}",
         f"PDF files discovered: {counts['expected_pdfs']}",
-        "=== COUNTS ===",
+        "\n\n=== COUNTS ===",
         f"Expected PDFs (ZIP): {counts['expected_pdfs']}",
         f"PDFs loaded into documents: {counts['pdfs_loaded_into_documents']}",
         f"PDFs present in chunks: {counts['pdfs_present_in_chunks']}",
-        f"Total pages in documents: {counts['total_pages_in_documents']}",
+        f"\nTotal pages in documents: {counts['total_pages_in_documents']}",
         f"Total chunks: {counts['total_chunks']}",
-        f"Files skipped (no extractable text): {counts['files_skipped_no_text']}",
+        f"\nFiles skipped (no extractable text): {counts['files_skipped_no_text']}",
         f"Files with loader errors: {counts['files_with_loader_errors']}",
-        f"New files: {counts['new_files']}",
+        f"Files not reprocessed in this run: {counts['files_not_reprocessed']}",
+        f"\nNew files: {counts['new_files']}",
         f"Updated files: {counts['updated_files']}",
         f"Removed files: {counts['removed_files']}",
         f"Unchanged files: {counts['unchanged_files']}",
@@ -586,6 +600,11 @@ def print_audit_summary(audit_report):
     lines.append("\n=== FILES USED ===")
     for source_file in audit_report["files"]["used"]:
         lines.append(f"- {source_file}")
+
+    if audit_report["files"].get("not_reprocessed"):
+        lines.append("\n=== FILES NOT REPROCESSED IN THIS RUN ===")
+        for source in audit_report["files"]["not_reprocessed"]:
+            lines.append(f"- {source}")
 
     if audit_report["files"]["skipped_no_text"]:
         lines.append("\n=== FILES SKIPPED (NO EXTRACTABLE TEXT) ===")
