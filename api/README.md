@@ -96,7 +96,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 4. Validar:
 
 - Swagger: `http://localhost:8000/docs`
-- Health basico: endpoint raiz da API (via docs)
+- Health basico: `http://localhost:8000/health`
 
 ## Execucao com Docker Compose
 

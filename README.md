@@ -90,6 +90,7 @@ docker compose up -d --build
 
 - Web: `http://localhost:3000`
 - API Swagger: `http://localhost:8000/docs`
+- API Health: `http://localhost:8000/health`
 - pgAdmin: `http://localhost:5050`
 
 ## Servico de Ingestao
