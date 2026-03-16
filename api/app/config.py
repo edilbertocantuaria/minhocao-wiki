@@ -5,9 +5,10 @@ from pinecone import Pinecone
 
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.yaml"
 
-with CONFIG_PATH.open("r", encoding="utf-8") as f:
-    config = yaml.safe_load(f) or {}
-
+config = {}
+if CONFIG_PATH.exists():
+    with CONFIG_PATH.open("r", encoding="utf-8") as f:
+        config = yaml.safe_load(f) or {}
 
 def read_config(key: str, default=None):
     return os.getenv(key, config.get(key, default))
