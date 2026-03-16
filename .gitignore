@@ -16,6 +16,7 @@ api/env/
 # =========================
 # Environment / secrets
 # =========================
+.env
 api/config.yaml
 api/.env
 

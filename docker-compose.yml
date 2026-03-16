@@ -30,8 +30,9 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql+psycopg2://postgres:postgres@db:5432/minhocao_wiki
-      - JWT_SECRET_KEY=change-this-secret-in-production
+      - DATABASE_URL=${DATABASE_URL:-postgresql+psycopg2://postgres:postgres@db:5432/minhocao_wiki}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
     volumes:
       - ./api/config.yaml:/app/config.yaml:ro
       - ./api/docs:/app/docs
@@ -43,6 +44,8 @@ services:
   web:
     build:
       context: ./web
+      args:
+        - NEXT_PUBLIC_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
     ports:
       - "3000:3000"
     environment:

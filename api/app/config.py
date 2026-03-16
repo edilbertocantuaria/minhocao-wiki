@@ -20,6 +20,7 @@ DATABASE_URL = read_config(
 JWT_SECRET_KEY = read_config("JWT_SECRET_KEY", "change-this-secret-in-production")
 JWT_ALGORITHM = read_config("JWT_ALGORITHM", "HS256")
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(read_config("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", 60))
+GOOGLE_CLIENT_ID = read_config("GOOGLE_CLIENT_ID", "")
 
 os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
 os.environ["PINECONE_API_KEY"] = PINECONE_API_KEY

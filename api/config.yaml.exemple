@@ -14,3 +14,4 @@ DATABASE_URL: "postgresql+psycopg2://postgres:postgres@localhost:5432/minhocao_w
 JWT_SECRET_KEY: "change-this-secret-in-production"
 JWT_ALGORITHM: "HS256"
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES: 60
+GOOGLE_CLIENT_ID: "your-google-client-id.apps.googleusercontent.com"

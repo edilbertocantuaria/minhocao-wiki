@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
+import { GoogleSignInButton } from '@/components/google-signin-button'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -110,6 +111,14 @@ export default function LoginPage() {
               'Entrar'
             )}
           </Button>
+
+          <div className="flex items-center gap-3">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-xs text-muted-foreground">ou</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
+          <GoogleSignInButton text="signin_with" onError={setError} />
         </form>
 
         {/* Link para registro */}

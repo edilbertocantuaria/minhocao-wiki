@@ -14,6 +14,7 @@ interface AuthContextType {
   isLoading: boolean
   isAuthenticated: boolean
   login: (email: string, password: string) => Promise<void>
+  loginWithGoogle: (idToken: string) => Promise<void>
   register: (email: string, password: string) => Promise<void>
   logout: () => void
 }
@@ -93,6 +94,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await login(email, password)
   }, [login])
 
+  const loginWithGoogle = useCallback(async (idToken: string) => {
+    const response = await fetch('/api/auth/google', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id_token: idToken }),
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || 'Erro ao autenticar com Google')
+    }
+
+    const data = await response.json()
+    const accessToken = data.access_token
+
+    const payload = JSON.parse(atob(accessToken.split('.')[1]))
+    const userData: User = {
+      id: payload.sub,
+      email: payload.email || '',
+      created_at: new Date().toISOString(),
+    }
+
+    setToken(accessToken)
+    setUser(userData)
+
+    sessionStorage.setItem(TOKEN_KEY, accessToken)
+    sessionStorage.setItem(USER_KEY, JSON.stringify(userData))
+  }, [])
+
   const logout = useCallback(() => {
     setToken(null)
     setUser(null)
@@ -108,6 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         isAuthenticated: !!token,
         login,
+        loginWithGoogle,
         register,
         logout,
       }}
