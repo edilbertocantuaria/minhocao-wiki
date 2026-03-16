@@ -50,10 +50,26 @@ services:
       - -lc
       - |
         while true; do
-          echo "[ingest-worker] starting ingestion at $(date '+%Y-%m-%d %H:%M:%S')";
-          python ingestion/ingest_documents.py;
-          echo "[ingest-worker] next run in ${INGEST_INTERVAL_SECONDS:-7200}s";
-          sleep "${INGEST_INTERVAL_SECONDS:-7200}";
+          interval="$${INGEST_INTERVAL_SECONDS:-7200}";
+          start_epoch="$(date +%s)";
+          echo "[ingest-worker] starting ingestion at $(date '+%Y-%m-%d %H:%M:%S') (interval=$${interval}s)";
+
+          if python ingestion/ingest_documents.py; then
+            echo "[ingest-worker] ingestion finished successfully";
+          else
+            echo "[ingest-worker] ingestion failed (will retry)";
+          fi;
+
+          end_epoch="$(date +%s)";
+          duration="$((end_epoch - start_epoch))";
+          sleep_for="$((interval - duration))";
+
+          if [ "$${sleep_for}" -lt 0 ]; then
+            sleep_for=0;
+          fi;
+
+          echo "[ingest-worker] duration=$${duration}s, sleeping=$${sleep_for}s, next cycle at $(date -d "+$${sleep_for} seconds" '+%Y-%m-%d %H:%M:%S')";
+          sleep "$${sleep_for}";
         done
     environment:
       - DATABASE_URL=${DATABASE_URL:-postgresql+psycopg2://postgres:postgres@db:5432/minhocao_wiki}
