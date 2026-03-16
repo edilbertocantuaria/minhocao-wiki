@@ -1,56 +1,43 @@
-# Minhocão Wiki API — Documentation
+﻿# Minhocao Wiki API - API Documentation
 
 ## Overview
 
-REST API built with FastAPI. Provides JWT-authenticated access to a RAG (Retrieval-Augmented Generation) chat backed by PostgreSQL persistence.
+REST API em FastAPI com autenticacao JWT, login Google, persistencia em PostgreSQL e resposta de chat em streaming.
 
-- **Base URL (local):** `http://localhost:8000`
-- **Interactive docs:** `http://localhost:8000/docs`
-- **Content-Type:** `application/json` for all request bodies (except `/auth/token`)
-
----
+- Base URL local: `http://localhost:8000`
+- Swagger: `http://localhost:8000/docs`
 
 ## Authentication
 
-All endpoints except `/auth/register`, `/auth/login`, and `/auth/token` require a Bearer token in the `Authorization` header.
+Endpoints protegidos exigem header:
 
-```
+```http
 Authorization: Bearer <access_token>
 ```
 
-The token is a **JWT** (HS256), valid for **60 minutes**. There is no refresh token — re-authenticate when the token expires.
+Fluxo recomendado:
 
-### Typical auth flow
+1. `POST /auth/register` (opcional para criar conta).
+2. `POST /auth/login` ou `POST /auth/google`.
+3. Usar `access_token` nas chamadas protegidas.
 
-```
-1. POST /auth/register   → create account
-2. POST /auth/login      → receive access_token
-3. Use access_token      → send as Authorization: Bearer header on every protected request
-```
-
----
-
-## Error Response Shape
-
-All errors follow the standard FastAPI error envelope:
+## Error Shape
 
 ```json
 {
-  "detail": "Human-readable error message"
+  "detail": "Human-readable message"
 }
 ```
-
----
 
 ## Endpoints
 
 ### 1. Register
 
-**`POST /auth/register`**
+`POST /auth/register`
 
-Creates a new user account.
+Cria conta por email/senha.
 
-#### Request body
+Request:
 
 ```json
 {
@@ -59,419 +46,234 @@ Creates a new user account.
 }
 ```
 
-| Field      | Type   | Required | Rules             |
-|------------|--------|----------|-------------------|
-| `email`    | string | yes      | valid email format |
-| `password` | string | yes      | min length: 6     |
+Responses:
 
-#### Response — `201 Created`
+- `201 Created`
 
 ```json
 {
-  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "id": "uuid",
   "email": "user@example.com",
   "created_at": "2026-03-15T14:00:00.000000+00:00"
 }
 ```
 
-| Field        | Type             | Description                  |
-|--------------|------------------|------------------------------|
-| `id`         | string (UUID v4) | Unique user identifier       |
-| `email`      | string           | Registered email             |
-| `created_at` | string (ISO 8601)| Account creation timestamp   |
+- `409` email ja cadastrado
+- `422` payload invalido
+- `503` DB indisponivel
 
-#### Error codes
+### 2. Login (JSON)
 
-| Status | `detail` | Cause |
-|--------|----------|-------|
-| `409`  | `"Email already registered"` | Email already in use |
-| `422`  | Validation error object | Invalid email format or short password |
-| `503`  | `"Database unavailable..."` | PostgreSQL unreachable |
-| `500`  | `"Database error while creating user"` | Unexpected DB error |
+`POST /auth/login`
 
----
-
-### 2. Login
-
-**`POST /auth/login`**
-
-Authenticates a user and returns a JWT token.
-
-#### Request body
+Request:
 
 ```json
 {
   "email": "user@example.com",
-  "password": "yourpassword"
+  "password": "your-password"
 }
 ```
 
-| Field      | Type   | Required |
-|------------|--------|----------|
-| `email`    | string | yes      |
-| `password` | string | yes      |
-
-#### Response — `200 OK`
+Response `200`:
 
 ```json
 {
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "access_token": "jwt-token",
   "token_type": "bearer"
 }
 ```
 
-| Field          | Type   | Description                         |
-|----------------|--------|-------------------------------------|
-| `access_token` | string | JWT to be sent in `Authorization` header |
-| `token_type`   | string | Always `"bearer"`                   |
+Erros comuns:
 
-#### Error codes
+- `401` credenciais invalidas
+- `422` payload invalido
+- `503` DB indisponivel
 
-| Status | `detail` | Cause |
-|--------|----------|-------|
-| `401`  | `"Invalid email or password"` | Wrong credentials |
-| `422`  | Validation error object | Malformed request body |
-| `503`  | `"Database unavailable..."` | PostgreSQL unreachable |
+### 3. Login OAuth2 Form (Swagger)
 
----
+`POST /auth/token`
 
-### 3. Login (OAuth2 form — Swagger only)
+Body: `application/x-www-form-urlencoded`
 
-**`POST /auth/token`**
+- `username`: email
+- `password`: senha
 
-OAuth2 password grant form endpoint. Primarily used by the Swagger **Authorize 🔒** button. Functionally identical to `/auth/login`.
+Resposta igual a `/auth/login`.
 
-#### Request body — `application/x-www-form-urlencoded`
+### 4. Login com Google
 
-| Field      | Type   | Required |
-|------------|--------|----------|
-| `username` | string | yes (send the user's email here) |
-| `password` | string | yes      |
+`POST /auth/google`
 
-#### Response — `200 OK`
-
-Same as `/auth/login`.
-
-> **Note for frontend:** Prefer `/auth/login` (JSON body). Use `/auth/token` only if you need OAuth2 form compatibility.
-
----
-
-### 4. Create Conversation
-
-**`POST /conversations`** 🔒
-
-Creates a new conversation for the authenticated user.
-
-#### Headers
-
-```
-Authorization: Bearer <access_token>
-```
-
-#### Request body
+Request:
 
 ```json
 {
-  "title": "My first conversation"
+  "id_token": "google-id-token"
 }
 ```
 
-| Field   | Type            | Required | Notes                              |
-|---------|-----------------|----------|------------------------------------|
-| `title` | string or null  | no       | Omit or send `null` for no title   |
+Comportamento:
 
-#### Response — `201 Created`
+1. Valida `id_token` no endpoint `https://oauth2.googleapis.com/tokeninfo`.
+2. Verifica `aud` igual a `GOOGLE_CLIENT_ID`.
+3. Exige email verificado.
+4. Cria usuario automaticamente se nao existir.
+
+Response `200`:
 
 ```json
 {
-  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "title": "My first conversation",
+  "access_token": "jwt-token",
+  "token_type": "bearer"
+}
+```
+
+Erros comuns:
+
+- `401` token invalido ou email nao verificado
+- `503` Google auth nao configurado ou servico indisponivel
+
+### 5. Create Conversation
+
+`POST /conversations` (protegido)
+
+Request:
+
+```json
+{
+  "title": "Minha conversa"
+}
+```
+
+`title` pode ser `null`.
+
+Response `201`:
+
+```json
+{
+  "id": "uuid",
+  "title": "Minha conversa",
   "created_at": "2026-03-15T14:05:00.000000+00:00"
 }
 ```
 
-| Field        | Type              | Description                   |
-|--------------|-------------------|-------------------------------|
-| `id`         | string (UUID v4)  | Conversation identifier       |
-| `title`      | string or null    | Conversation title            |
-| `created_at` | string (ISO 8601) | Creation timestamp            |
+### 6. List Conversations
 
-#### Error codes
+`GET /conversations` (protegido)
 
-| Status | `detail` | Cause |
-|--------|----------|-------|
-| `401`  | `"Missing bearer token..."` | No/invalid token |
-| `422`  | Validation error object | Malformed body |
-
----
-
-### 5. List Conversations
-
-**`GET /conversations`** 🔒
-
-Returns all conversations belonging to the authenticated user.
-
-#### Headers
-
-```
-Authorization: Bearer <access_token>
-```
-
-#### Response — `200 OK`
+Response `200`:
 
 ```json
 [
   {
-    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-    "title": "My first conversation",
+    "id": "uuid",
+    "title": "Minha conversa",
     "created_at": "2026-03-15T14:05:00.000000+00:00"
-  },
-  {
-    "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
-    "title": null,
-    "created_at": "2026-03-15T15:00:00.000000+00:00"
   }
 ]
 ```
 
-Returns an empty array `[]` if the user has no conversations.
+### 7. Get Conversation Messages
 
-Each item has the same shape as the `POST /conversations` response.
+`GET /conversations/{conversation_id}` (protegido)
 
-#### Error codes
-
-| Status | `detail` | Cause |
-|--------|----------|-------|
-| `401`  | `"Missing bearer token..."` | No/invalid token |
-
----
-
-### 6. Get Conversation Messages
-
-**`GET /conversations/{conversation_id}`** 🔒
-
-Returns all messages in a specific conversation (in chronological order).
-
-#### Path parameter
-
-| Parameter         | Type             | Description           |
-|-------------------|------------------|-----------------------|
-| `conversation_id` | string (UUID v4) | Conversation to fetch |
-
-#### Headers
-
-```
-Authorization: Bearer <access_token>
-```
-
-#### Response — `200 OK`
+Response `200`:
 
 ```json
 [
   {
-    "id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+    "id": "uuid",
     "role": "user",
-    "content": "What is the Minhocão?",
+    "content": "Pergunta",
     "created_at": "2026-03-15T14:10:00.000000+00:00"
   },
   {
-    "id": "d4e5f6a7-b8c9-0123-def0-234567890123",
+    "id": "uuid",
     "role": "assistant",
-    "content": "The Minhocão (officially Elevado Costa e Silva) is an elevated expressway...",
+    "content": "Resposta",
     "created_at": "2026-03-15T14:10:03.000000+00:00"
   }
 ]
 ```
 
-| Field        | Type              | Description                                    |
-|--------------|-------------------|------------------------------------------------|
-| `id`         | string (UUID v4)  | Message identifier                             |
-| `role`       | string            | Either `"user"` or `"assistant"`               |
-| `content`    | string            | Full message text                              |
-| `created_at` | string (ISO 8601) | Message timestamp                              |
+Erros:
 
-Returns an empty array `[]` if no messages have been sent yet.
+- `404` conversa nao encontrada
 
-#### Error codes
+### 8. Delete Conversation
 
-| Status | `detail` | Cause |
-|--------|----------|-------|
-| `401`  | `"Missing bearer token..."` | No/invalid token |
-| `404`  | `"Conversation not found"` | ID doesn't exist or belongs to another user |
+`DELETE /conversations/{conversation_id}` (protegido)
 
----
+Response `204 No Content`.
 
-### 7. Delete Conversation
+Erros:
 
-**`DELETE /conversations/{conversation_id}`** 🔒
+- `404` conversa nao encontrada
 
-Deletes a conversation and all its messages (cascade).
+### 9. Chat (Streaming)
 
-#### Path parameter
+`POST /chat` (protegido)
 
-| Parameter         | Type             | Description              |
-|-------------------|------------------|--------------------------|
-| `conversation_id` | string (UUID v4) | Conversation to delete   |
-
-#### Headers
-
-```
-Authorization: Bearer <access_token>
-```
-
-#### Response — `204 No Content`
-
-Empty body. Deletion was successful.
-
-#### Error codes
-
-| Status | `detail` | Cause |
-|--------|----------|-------|
-| `401`  | `"Missing bearer token..."` | No/invalid token |
-| `404`  | `"Conversation not found"` | ID doesn't exist or belongs to another user |
-
----
-
-### 8. Chat (Streaming)
-
-**`POST /chat`** 🔒
-
-Sends a question within a conversation and returns the assistant's answer as a **streaming plain-text response** (Server-Sent style chunked transfer).
-
-The message history of the conversation is automatically used as context. Both the user question and the assistant answer are persisted to the database after the stream completes.
-
-#### Headers
-
-```
-Authorization: Bearer <access_token>
-```
-
-#### Request body
+Request:
 
 ```json
 {
-  "conversation_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "question": "What is the Minhocão?"
+  "conversation_id": "uuid",
+  "question": "Qual e a historia do ICC?"
 }
 ```
 
-| Field             | Type             | Required | Rules          |
-|-------------------|------------------|----------|----------------|
-| `conversation_id` | string (UUID v4) | yes      | must belong to the authenticated user |
-| `question`        | string           | yes      | min length: 1  |
+Response `200`:
 
-#### Response — `200 OK` (streaming)
+- `Content-Type: text/plain`
+- corpo em streaming (chunked)
 
-- **Content-Type:** `text/plain`
-- **Transfer-Encoding:** `chunked`
+Nao retorna JSON nesse endpoint. O cliente deve ler stream incrementalmente.
 
-The response body is the assistant's answer delivered as a stream of text chunks. The frontend must read the response incrementally and concatenate the chunks to render the full message progressively.
+Comportamentos relevantes:
 
-**Example (concatenated result):**
-```
-The Minhocão (officially Elevado Costa e Silva) is an elevated expressway in São Paulo...
-```
+1. Busca o historico da conversa e usa como contexto.
+2. Se o titulo estiver vazio/untitled, gera titulo automaticamente por LLM.
+3. Salva mensagem do usuario e resposta final do assistente no banco.
 
-There is **no JSON envelope** — the raw text of the answer is streamed directly.
+Erros:
 
-#### How to consume the stream (JavaScript)
+- `404` conversa nao encontrada
+- `422` payload invalido
 
-```javascript
-const response = await fetch("http://localhost:8000/chat", {
-  method: "POST",
+## Exemplo de consumo do /chat (Frontend)
+
+```ts
+const response = await fetch('http://localhost:8000/chat', {
+  method: 'POST',
   headers: {
-    "Content-Type": "application/json",
-    "Authorization": `Bearer ${accessToken}`,
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
   },
   body: JSON.stringify({
     conversation_id: conversationId,
-    question: userMessage,
+    question: message,
   }),
-});
+})
 
-const reader = response.body.getReader();
-const decoder = new TextDecoder();
-let fullText = "";
+if (!response.ok || !response.body) {
+  throw new Error('Chat request failed')
+}
+
+const reader = response.body.getReader()
+const decoder = new TextDecoder()
+let fullText = ''
 
 while (true) {
-  const { done, value } = await reader.read();
-  if (done) break;
-  const chunk = decoder.decode(value, { stream: true });
-  fullText += chunk;
-  // update UI incrementally here
+  const { done, value } = await reader.read()
+  if (done) break
+  fullText += decoder.decode(value, { stream: true })
 }
 ```
 
-#### Error codes
+## Notes for Integrators
 
-| Status | `detail` | Cause |
-|--------|----------|-------|
-| `401`  | `"Missing bearer token..."` | No/invalid token |
-| `404`  | `"Conversation not found"` | `conversation_id` doesn't exist or belongs to another user |
-| `422`  | Validation error object | Malformed body or empty question |
-
----
-
-## Complete Frontend Flow
-
-```
-1. Register
-   POST /auth/register
-   Body: { email, password }
-   → store nothing (optionally auto-login)
-
-2. Login
-   POST /auth/login
-   Body: { email, password }
-   → store access_token (memory or sessionStorage — avoid localStorage for security)
-
-3. Load conversations
-   GET /conversations
-   Header: Authorization: Bearer <access_token>
-   → render sidebar list
-
-4. Create a conversation (if new chat)
-   POST /conversations
-   Body: { title: null }  or  { title: "some title" }
-   Header: Authorization: Bearer <access_token>
-   → store returned conversation.id
-
-5. Load message history (when user opens an existing conversation)
-   GET /conversations/{conversation_id}
-   Header: Authorization: Bearer <access_token>
-   → render messages with role "user" / "assistant"
-
-6. Send a message
-   POST /chat
-   Body: { conversation_id, question }
-   Header: Authorization: Bearer <access_token>
-   → stream response, render chunks as they arrive
-
-7. Delete a conversation
-   DELETE /conversations/{conversation_id}
-   Header: Authorization: Bearer <access_token>
-   → remove from sidebar list on 204 response
-
-8. Handle 401 globally
-   → clear stored token, redirect to login screen
-```
-
----
-
-## Data Types Reference
-
-| Type | Format | Example |
-|------|--------|---------|
-| UUID | `string` — UUID v4 | `"550e8400-e29b-41d4-a716-446655440000"` |
-| Timestamp | `string` — ISO 8601 with timezone | `"2026-03-15T14:00:00.000000+00:00"` |
-| Role | `string` — enum | `"user"` or `"assistant"` |
-| Token type | `string` | always `"bearer"` |
-
----
-
-## Security Notes
-
-- Tokens expire after **60 minutes**. Implement re-authentication on `401` responses.
-- Store `access_token` in memory (React state) or `sessionStorage`. Avoid `localStorage` due to XSS risk.
-- All conversation/message endpoints are **scope-isolated**: users can only access their own data. Attempting to access another user's conversation returns `404`.
-- Passwords must be at least **6 characters**. The API stores only bcrypt hashes — plaintext passwords are never stored.
+1. Prefira usar as rotas proxy do frontend (`web/app/api/*`) para evitar expor URL interna da API no browser.
+2. O token JWT atual nao possui refresh token; refaca login quando expirar.
+3. Para login Google em ambiente local, configure origem `http://localhost:3000` no Google Cloud.

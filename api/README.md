@@ -1,383 +1,121 @@
-# Minhocão Wiki - API
+﻿# Minhocao Wiki API
 
-API de **busca semântica com RAG (Retrieval Augmented Generation)** construída em Python.
+Backend FastAPI responsavel por autenticacao, gerenciamento de conversas e respostas RAG em streaming.
 
-A API recebe uma pergunta via HTTP, busca documentos relevantes em um banco vetorial e usa um modelo de linguagem para gerar a resposta.
+## Documentacao de Endpoints
 
-Funcionalidades implementadas:
+Documentacao completa e atualizada da API:
 
-* API REST
-* Chat com histórico de conversa
-* Query rewriting (perguntas dependentes de contexto)
-* Streaming de resposta
-* Retorno de fontes dos documentos
-* Logging para experimentos de TCC
+- `api/docs/api-doc.md`
 
----
+Use esse arquivo como referencia principal de contratos HTTP, exemplos e codigos de erro.
 
-# 1. Pré-requisitos
+## Responsabilidades da API
 
-Antes de rodar o projeto você precisa instalar:
+1. Cadastro e login com JWT.
+2. Login com Google (`/auth/google`).
+3. CRUD basico de conversas (criar, listar, obter mensagens, deletar).
+4. Endpoint de chat em streaming (`/chat`).
+5. Persistencia em PostgreSQL.
+6. Integracao com pipeline RAG (LangChain + Pinecone + OpenAI).
 
-* Python 3.10 ou superior
-* pip (gerenciador de pacotes Python)
-* Conta na OpenAI
-* Conta no Pinecone
+## Stack
 
-Verifique o Python:
+- Python 3.11
+- FastAPI + Uvicorn
+- SQLAlchemy + psycopg2
+- LangChain
+- Pinecone
+- OpenAI
 
-```
-python --version
-```
+Dependencias completas em `api/requirements.txt`.
 
-ou
+## Estrutura
 
-```
-python3 --version
-```
-
-Se aparecer algo como:
-
-```
-Python 3.11.5
-```
-
-então está ok.
-
----
-
-# 2. Estrutura do projeto
-
-Estrutura esperada:
-
-```
-minhocao-wiki
-│
-└── api
-    │
-    ├── app
-    │   ├── main.py
-    │   ├── rag_chain.py
-    │   ├── prompts.py
-    │   ├── memory.py
-    │   ├── logger.py
-    │   ├── models.py
-    │   └── config.py
-    │
-    ├── ingestion
-    │   └── ingest_documents.py
-    │
-    ├── tests
-    │   ├── test_api.py
-    │   └── test_chat_flow.py
-    │
-    ├── docs
-    ├── logs
-    │
-    ├── config.yaml
-    ├── requirements.txt
-    └── README.md
+```text
+api/
+├── app/
+│   ├── main.py                 # Inicializacao FastAPI
+│   ├── config.py               # Leitura de config/env
+│   ├── auth.py                 # JWT e password hashing
+│   ├── models.py               # Modelos SQLAlchemy
+│   ├── routers/
+│   │   ├── auth.py
+│   │   ├── conversations.py
+│   │   └── chat.py
+│   └── services/
+│       ├── chat_service.py
+│       └── conversation_service.py
+├── docs/
+│   └── api-doc.md
+├── ingestion/
+│   └── ingest_documents.py
+├── tests/
+└── config.yaml.exemple
 ```
 
----
+## Configuracao
 
-# 3. Entrar na pasta da API
+Existem duas fontes de configuracao:
 
-Abra o terminal e navegue até a pasta:
+1. `config.yaml` (base)
+2. Variaveis de ambiente (sobrescrevem o `config.yaml`)
 
-```
-cd minhocao-wiki/api
-```
+Campos mais importantes:
 
----
+- `OPENAI_API_KEY`
+- `PINECONE_API_KEY`
+- `INDEX_NAME`
+- `DATABASE_URL`
+- `JWT_SECRET_KEY`
+- `GOOGLE_CLIENT_ID`
 
-# 4. Criar ambiente virtual
+Exemplo base em `api/config.yaml.exemple`.
 
-Ambiente virtual isola dependências Python do projeto.
+## Execucao Local (sem Docker)
 
-### Linux / Mac
+1. Criar venv e instalar dependencias:
 
-```
-python3 -m venv venv
-```
-
-Ativar:
-
-```
-source venv/bin/activate
-```
-
-### Windows
-
-```
-python -m venv venv
-```
-
-Ativar:
-
-```
-venv\Scripts\activate
-```
-
-Se funcionou você verá algo assim no terminal:
-
-```
-(venv)
-```
-
----
-
-# 5. Instalar dependências
-
-Instale todos os pacotes necessários:
-
-```
+```bash
+cd api
+python -m venv .venv
+source .venv/bin/activate  # Linux/macOS
+# .venv\Scripts\activate   # Windows
 pip install -r requirements.txt
 ```
 
-Isso instalará bibliotecas como:
+2. Ajustar `config.yaml` (ou env vars).
 
-* FastAPI
-* LangChain
-* Pinecone
-* OpenAI SDK
+3. Subir API:
 
----
-
-# 6. Configurar chaves da API
-
-Abra o arquivo:
-
-```
-config.yaml
+```bash
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Preencha com suas chaves:
+4. Acessar Swagger: `http://localhost:8000/docs`.
 
-```
-OPENAI_API_KEY: "SUA_CHAVE_OPENAI"
-PINECONE_API_KEY: "SUA_CHAVE_PINECONE"
-INDEX_NAME: "unb-rag"
-```
+## Execucao com Docker Compose
 
----
+No root do projeto:
 
-# 7. Adicionar documentos
-
-Coloque os PDFs que serão usados pelo RAG na pasta:
-
-```
-api/docs
+```bash
+docker compose up -d --build api db
 ```
 
-Exemplo:
+## Ingestao de Documentos
 
-```
-docs/
-   regulamento.pdf
-   cursos_unb.pdf
-```
+Comando:
 
----
-
-# 8. Rodar ingestão de documentos
-
-Este passo cria **embeddings** e envia os documentos para o banco vetorial.
-
-Execute:
-
-```
+```bash
+cd api
 python ingestion/ingest_documents.py
 ```
 
-Pipeline executado:
+Esse processo prepara o indice vetorial e registra auditoria em `api/logs/`.
 
-```
-PDFs
- ↓
-Loader
- ↓
-Chunking
- ↓
-Embeddings
- ↓
-Pinecone
-```
+## Testes
 
-Se tudo der certo aparecerá:
-
-```
-Indexação concluída
-```
-
----
-
-# 9. Iniciar a API
-
-Execute:
-
-```
-uvicorn app.main:app --reload
-```
-
-O terminal mostrará algo como:
-
-```
-Uvicorn running on http://127.0.0.1:8000
-```
-
-A API agora está rodando.
-
----
-
-# 10. Abrir interface da API
-
-Abra no navegador:
-
-```
-http://localhost:8000/docs
-```
-
-Isso abre a documentação automática da API.
-
-Lá você pode testar o endpoint `/chat`.
-
----
-
-# 11. Fluxo manual com autenticação
-
-1. Criar conta:
-
-```
-POST /auth/register
-{
- "email": "usuario1@email.com",
- "password": "123456"
-}
-```
-
-2. Fazer login e obter token:
-
-```
-POST /auth/login
-{
- "email": "usuario1@email.com",
- "password": "123456"
-}
-```
-
-No Swagger (`/docs`), o botao `Authorize` usa o endpoint padrao OAuth2:
-
-```
-POST /auth/token
-Content-Type: application/x-www-form-urlencoded
-username=<email>
-password=<senha>
-```
-
-3. Criar conversa:
-
-```
-POST /conversations
-Authorization: Bearer <TOKEN>
-{
- "title": "Minha conversa"
-}
-```
-
-4. Enviar pergunta no chat:
-
-Endpoint:
-
-```
-POST /chat
-```
-
-Exemplo de body:
-
-```
-{
- "conversation_id": "<ID_DA_CONVERSA>",
- "question": "Quais cursos existem na UnB?"
-}
-```
-
-Header obrigatório:
-
-```
-Authorization: Bearer <TOKEN>
-```
-
-Resposta esperada:
-
-```
-A Universidade de Brasília oferece diversos cursos de graduação...
-
-Fonte:
-cursos_unb.pdf
-regulamento.pdf
-```
-
----
-
-# 12. Testar via script
-
-Executar teste simples:
-
-```
-python tests/test_api.py
-```
-
-Teste de conversa:
-
-```
-python tests/test_chat_flow.py
-```
-
-Exemplo de saída:
-
-```
-Pergunta: Quais cursos existem na UnB?
-Resposta: ...
-```
-
----
-
-# 13. Logs gerados
-
-As consultas ficam registradas em:
-
-```
-logs/rag_logs.jsonl
-```
-
-Exemplo:
-
-```
-{
- "timestamp": "...",
- "question": "Quais cursos existem?",
- "sources": ["cursos_unb.pdf"],
- "answer": "..."
-}
-```
-
-Esses logs podem ser usados para:
-
-* análise de desempenho
-* avaliação de RAG
-* geração de gráficos para o TCC
-
----
-
-# 14. Fluxo da arquitetura
-
-```
-Usuário
-   ↓
-POST /chat
-   ↓
-Histórico da conversa
-   ↓
-Qu
+```bash
+cd api
+pytest
 ```

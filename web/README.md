@@ -1,122 +1,89 @@
-# RAG Chat
+﻿# Minhocao Wiki Web
 
-Interface de chat para aplicações RAG (Retrieval-Augmented Generation) com controle de parâmetros do LLM.
+Frontend Next.js da aplicacao, com autenticacao, historico de conversas e interface de chat em streaming.
 
-## Requisitos
+## O que este modulo faz
 
-- Node.js 18.x ou superior
-- npm, yarn ou pnpm (gerenciador de pacotes)
+1. Fluxo de login/cadastro por email e Google.
+2. Consumo da API via rotas proxy em `app/api/*`.
+3. Renderizacao incremental da resposta de chat (streaming).
+4. Sidebar com historico de conversas.
 
-## Instalação
+## Stack
 
-1. Clone o repositório:
+- Next.js 16
+- React 19
+- TypeScript
+- Tailwind CSS
+- shadcn/ui + Radix UI
 
-```bash
-git clone <url-do-repositorio>
-cd rag-chat
+## Estrutura
+
+```text
+web/
+├── app/
+│   ├── login/page.tsx
+│   ├── register/page.tsx
+│   ├── page.tsx
+│   └── api/
+│       ├── auth/
+│       ├── chat/
+│       └── conversations/
+├── components/
+│   ├── chat-interface.tsx
+│   ├── chat-sidebar.tsx
+│   ├── chat-input.tsx
+│   └── google-signin-button.tsx
+├── contexts/
+│   └── auth-context.tsx
+└── package.json
 ```
 
-2. Instale as dependências:
+## Variaveis de Ambiente
 
-```bash
-# npm
-npm install
+Arquivo local: `web/.env.local`
 
-# yarn
-yarn install
+Exemplo:
 
-# pnpm
-pnpm install
-```
-
-3. Configure as variáveis de ambiente:
-
-```bash
-cp .env.example .env.local
-```
-
-Variável disponível:
-
-```bash
+```dotenv
 API_BASE_URL=http://localhost:8000
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
 ```
 
-Essa URL é usada pela rota interna do Next em `POST /api/chat`, que faz proxy para o backend Python em `/chat`.
+Observacao:
 
-## Executando o projeto
+- Em Docker, `NEXT_PUBLIC_GOOGLE_CLIENT_ID` entra no build via `ARG` no `Dockerfile` e `docker-compose.yml`.
 
-### Desenvolvimento
+## Rodando em Desenvolvimento
 
 ```bash
-# npm
-npm run dev
-
-# yarn
-yarn dev
-
-# pnpm
+cd web
+pnpm install
 pnpm dev
 ```
 
-O servidor será iniciado em [http://localhost:3000](http://localhost:3000).
+Acesse: `http://localhost:3000`.
 
-Se você alterar o arquivo `.env.local` com o servidor de desenvolvimento já rodando, reinicie o processo do Next para garantir que a nova variável seja carregada.
+## Rodando com Docker Compose
 
-### Build de produção
+No root:
 
 ```bash
-# npm
-npm run build
-npm start
+docker compose up -d --build web api db
+```
 
-# yarn
-yarn build
-yarn start
+## Fluxo de Integracao com API
 
-# pnpm
+1. O browser chama rotas internas Next (`/api/...`).
+2. Essas rotas fazem proxy para `http://api:8000` no ambiente Docker.
+3. Token JWT fica em `sessionStorage` no cliente.
+4. Requisicoes autenticadas incluem `Authorization: Bearer <token>`.
+
+## Build e Lint
+
+```bash
+cd web
+pnpm lint
 pnpm build
 pnpm start
 ```
-
-## Estrutura do projeto
-
-```
-├── app/
-│   ├── globals.css      # Estilos globais e tokens de design
-│   ├── layout.tsx       # Layout principal com providers
-│   └── page.tsx         # Página principal
-├── components/
-│   ├── ui/              # Componentes base (shadcn/ui)
-│   ├── chat-interface.tsx    # Interface principal do chat
-│   ├── chat-sidebar.tsx      # Sidebar com histórico
-│   ├── chat-message.tsx      # Componente de mensagem
-│   ├── chat-input.tsx        # Input de mensagem
-│   ├── parameters-panel.tsx  # Painel de parâmetros do LLM
-│   ├── parameter-control.tsx # Controle individual de parâmetro
-│   ├── theme-toggle.tsx      # Botão de alternância de tema
-│   └── theme-provider.tsx    # Provider de tema
-└── lib/
-    └── utils.ts         # Utilitários
-```
-
-## Funcionalidades
-
-- Chat com histórico de conversas
-- Sidebar ocultável com lista de conversas
-- Alternância de tema (claro/escuro)
-- Controle de parâmetros do LLM:
-  - `temperature` - Controla a aleatoriedade das respostas
-  - `max_tokens` - Limite de tokens na resposta
-  - `frequency_penalty` - Penaliza palavras frequentes
-  - `presence_penalty` - Penaliza palavras já mencionadas
-  - `n` - Número de respostas alternativas
-  - `seed` - Valor para resultados reproduzíveis
-  - `stop` - Palavras que interrompem a geração
-
-## Tecnologias
-
-- [Next.js 15](https://nextjs.org/) - Framework React
-- [Tailwind CSS](https://tailwindcss.com/) - Estilização
-- [shadcn/ui](https://ui.shadcn.com/) - Componentes de UI
-- [next-themes](https://github.com/pacocoursey/next-themes) - Gerenciamento de tema
-- [Lucide React](https://lucide.dev/) - Ícones
