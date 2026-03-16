@@ -122,6 +122,31 @@ Comando (a partir de `api/`):
 python ingestion/ingest_documents.py
 ```
 
+Atalho recomendado (na raiz do projeto):
+
+Windows (PowerShell):
+
+```powershell
+.\run_ingestion.ps1
+```
+
+Linux/macOS:
+
+```bash
+./run_ingestion.sh
+```
+
+Opcoes de build:
+
+- PowerShell: `.\run_ingestion.ps1 -Build` ou `.\run_ingestion.ps1 -NoCache`
+- Bash: `./run_ingestion.sh --build` ou `./run_ingestion.sh --no-cache`
+
+Comando Docker direto (alternativa):
+
+```bash
+docker compose run --rm api python ingestion/ingest_documents.py
+```
+
 ## Documentacao por Modulo
 
 - Backend: `api/README.md`

@@ -35,6 +35,7 @@ services:
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
     volumes:
       - ./api/config.yaml:/app/config.yaml:ro
+      - ./api/unb.zip:/app/unb.zip:ro
       - ./api/docs:/app/docs
       - ./api/logs:/app/logs
     depends_on:

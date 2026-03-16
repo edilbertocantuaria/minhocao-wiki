@@ -24,6 +24,7 @@ api/.env
 # Logs
 # =========================
 api/logs/
+api/manifests/
 *.log
 *.jsonl
 

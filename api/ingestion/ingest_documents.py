@@ -1,27 +1,53 @@
+import os
+import json
+import hashlib
+import logging
+import yaml
+import zipfile
 import shutil
 import time
-import zipfile
-from collections import Counter
+from datetime import datetime
 from pathlib import Path
-import re
+from collections import defaultdict
 
-from langchain_community.document_loaders import PyMuPDFLoader
+from pinecone import Pinecone, ServerlessSpec
+from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
-from langchain_community.vectorstores import Pinecone as PineconeVectorStore
 
-from pinecone import ServerlessSpec
 
-from app.config import pinecone_client, INDEX_NAME
+# ================================
+# CONFIG
+# ================================
 
-from app.logger import log_ingestion_audit
+BASE_DIR = Path(__file__).resolve().parent.parent
+CONFIG_FILE = BASE_DIR / "config.yaml"
+DOCS_PATH = BASE_DIR / "docs"
+LOG_DIR = BASE_DIR / "logs"
+MANIFEST_FILE = BASE_DIR / "manifests" / "document_manifest.json"
 
-ZIP_FILE = "unb.zip"
-EXTRACT_FOLDER = "docs/unb"
+def load_config():
+    with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+config = load_config()
+
+INDEX_NAME = config["INDEX_NAME"]
+PINECONE_API_KEY = config["PINECONE_API_KEY"]
+OPENAI_API_KEY = config["OPENAI_API_KEY"]
+
 INDEX_DIMENSION = 3072
 INDEX_METRIC = "cosine"
 INDEX_CLOUD = "aws"
 INDEX_REGION = "us-east-1"
+
+CHUNK_SIZE = 1000
+CHUNK_OVERLAP = 150
+UPSERT_BATCH = 100
+
+ZIP_PATH = BASE_DIR / "unb.zip"
+EXTRACT_PATH = DOCS_PATH / "unb"
+
 
 DOC_TYPE_LABELS = {
     "ato": "Ato",
@@ -52,412 +78,517 @@ BODY_LABELS = {
 
 def extract_zip():
 
-    zip_path = Path(ZIP_FILE)
-    extract_path = Path(EXTRACT_FOLDER)
+    if not ZIP_PATH.exists():
+        raise FileNotFoundError(f"ZIP file not found: {ZIP_PATH}")
 
-    if not zip_path.exists():
-        raise FileNotFoundError(f"ZIP file not found: {zip_path.resolve()}")
+    if EXTRACT_PATH.exists():
+        shutil.rmtree(EXTRACT_PATH)
 
-    if extract_path.exists():
-        shutil.rmtree(extract_path)
+    EXTRACT_PATH.mkdir(parents=True, exist_ok=True)
 
-    extract_path.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(ZIP_PATH, "r") as zip_ref:
+        zip_ref.extractall(EXTRACT_PATH)
 
-    with zipfile.ZipFile(zip_path, "r") as zip_ref:
-        zip_ref.extractall(extract_path)
-
-    return extract_path
+    return EXTRACT_PATH
 
 
-def recreate_index(index_name):
+# ================================
+# LOGGER
+# ================================
 
-    indexes = pinecone_client.list_indexes().names()
+def setup_logger():
 
-    if index_name in indexes:
-        pinecone_client.delete_index(index_name)
+    LOG_DIR.mkdir(exist_ok=True)
 
-        while index_name in pinecone_client.list_indexes().names():
-            time.sleep(1)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = LOG_DIR / f"ingestion_{timestamp}.txt"
 
-    pinecone_client.create_index(
-        name=index_name,
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)s | %(message)s",
+        handlers=[
+            logging.FileHandler(log_file, encoding="utf-8"),
+            logging.StreamHandler()
+        ]
+    )
+
+    logging.info(f"Log file: {log_file}")
+
+
+# ================================
+# UTIL
+# ================================
+
+def normalize_path(path):
+    return str(Path(path).as_posix())
+
+def file_hash(path):
+
+    h = hashlib.sha256()
+
+    with open(path, "rb") as f:
+        while chunk := f.read(8192):
+            h.update(chunk)
+
+    return h.hexdigest()
+
+def content_hash(text):
+
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+# ================================
+# MANIFEST
+# ================================
+
+def load_manifest():
+
+    if not MANIFEST_FILE.exists():
+        return {}
+
+    with open(MANIFEST_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_manifest(manifest):
+
+    MANIFEST_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(MANIFEST_FILE, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, indent=2)
+
+
+# ================================
+# DISCOVER DOCS
+# ================================
+
+def discover_pdf_paths(base_path):
+
+    pdfs = []
+
+    for root, _, files in os.walk(base_path):
+
+        for file in files:
+
+            if file.lower().endswith(".pdf"):
+                pdfs.append(os.path.join(root, file))
+
+    return pdfs
+
+
+def list_index_names(pc):
+
+    indexes = pc.list_indexes()
+
+    if hasattr(indexes, "names"):
+        return set(indexes.names())
+
+    return {i.name for i in indexes}
+
+
+def wait_for_index_ready(pc, index_name, timeout_seconds=180):
+
+    deadline = time.time() + timeout_seconds
+
+    while time.time() < deadline:
+
+        description = pc.describe_index(index_name)
+        status = getattr(description, "status", None)
+
+        if isinstance(status, dict):
+            if status.get("ready"):
+                return
+        elif status is not None and getattr(status, "ready", False):
+            return
+        else:
+            return
+
+        time.sleep(2)
+
+    raise TimeoutError(f"Index '{index_name}' is not ready after {timeout_seconds}s")
+
+
+def ensure_index_exists(pc):
+
+    if INDEX_NAME in list_index_names(pc):
+        return False
+
+    pc.create_index(
+        name=INDEX_NAME,
         dimension=INDEX_DIMENSION,
         metric=INDEX_METRIC,
         spec=ServerlessSpec(
             cloud=INDEX_CLOUD,
-            region=INDEX_REGION
-        )
+            region=INDEX_REGION,
+        ),
     )
 
-    index = pinecone_client.Index(index_name)
-
-    for _ in range(60):
-        try:
-            index.describe_index_stats()
-            return index
-        except Exception:
-            time.sleep(2)
-
-    raise TimeoutError(f"Index {index_name} was not ready after creation")
+    wait_for_index_ready(pc, INDEX_NAME)
+    return True
 
 
-def discover_pdf_paths(folder):
+# ================================
+# PINECONE AUDIT
+# ================================
 
-    return sorted(
-        [path for path in Path(folder).rglob("*") if path.is_file() and path.suffix.lower() == ".pdf"]
-    )
+def pinecone_audit(index, label):
 
+    stats = index.describe_index_stats()
 
-def normalize_path(path_value):
+    total_vectors = stats["total_vector_count"]
 
-    return str(Path(path_value).resolve()).lower()
+    namespaces = stats.get("namespaces", {})
 
+    logging.info("")
+    logging.info(f"=== PINECONE AUDIT ({label}) ===")
+    logging.info(f"Total vectors: {total_vectors}")
 
-def to_posix_relative(path_value, root_folder):
+    if namespaces:
+        for ns, data in namespaces.items():
+            logging.info(f"Namespace {ns}: {data['vector_count']}")
 
-    return str(Path(path_value).resolve().relative_to(Path(root_folder).resolve())).replace("\\", "/")
+    logging.info("")
 
-
-def format_document_number(number):
-
-    digits = re.sub(r"\D", "", str(number))
-
-    if not digits:
-        return None
-
-    return digits.zfill(4) if len(digits) <= 4 else digits
+    return total_vectors
 
 
-def build_fallback_source_title(file_path):
+# ================================
+# DETECT CHANGES
+# ================================
 
-    return file_path.stem.replace("_", " ").replace("-", " ").upper()
+def detect_document_changes(pdf_paths):
 
+    manifest = load_manifest()
 
-def build_source_title(file_path):
+    current_hashes = {
+        normalize_path(p): file_hash(p)
+        for p in pdf_paths
+    }
 
-    normalized_stem = re.sub(r"\s+", "_", file_path.stem.strip().lower())
-    normalized_stem = normalized_stem.replace("-", "_")
-    normalized_stem = re.sub(r"_+", "_", normalized_stem)
-    tokens = [token for token in normalized_stem.split("_") if token]
+    new_docs = []
+    updated_docs = []
+    unchanged_docs = []
+    removed_docs = []
 
-    if len(tokens) < 3:
-        return build_fallback_source_title(file_path)
+    for path in pdf_paths:
 
-    document_type = None
-    body = None
-    number = None
-    year = None
+        norm = normalize_path(path)
 
-    if tokens[0] in BODY_LABELS and len(tokens) >= 3 and tokens[1].isdigit() and tokens[2].isdigit():
-        document_type = "resolucao"
-        body = tokens[0]
-        number = tokens[1]
-        year = tokens[2]
-    elif tokens[0] == "resolucao" and len(tokens) >= 4:
-        document_type = "resolucao"
-        body = tokens[1]
-        number = tokens[2]
-        year = tokens[3]
-    elif tokens[0] == "ato" and len(tokens) >= 4:
-        document_type = "ato"
-        body = tokens[1]
-        number = tokens[2]
-        year = tokens[3]
-    elif tokens[0] == "instrucao" and len(tokens) >= 5 and tokens[1] == "normativa":
-        document_type = "instrucao_normativa"
-        body = tokens[2]
-        number = tokens[3]
-        year = tokens[4]
-    elif tokens[0] == "instrucao" and len(tokens) >= 4 and tokens[1] == "conjunta":
-        document_type = "instrucao_conjunta"
-        number = tokens[2]
-        year = tokens[3]
-    elif tokens[0] == "circular" and len(tokens) >= 4 and tokens[1] == "conjunta":
-        document_type = "circular_conjunta"
-        number = tokens[2]
-        year = tokens[3]
-        joint_bodies = [BODY_LABELS[token] for token in tokens[4:] if token in BODY_LABELS]
+        if norm not in manifest:
+            new_docs.append(path)
 
-        if joint_bodies:
-            return f"{DOC_TYPE_LABELS[document_type]} {' / '.join(joint_bodies)} Nº {format_document_number(number)}/{year}"
-    elif tokens[0] == "circular" and len(tokens) >= 3:
-        document_type = "circular"
+        elif manifest[norm]["hash"] != current_hashes[norm]:
+            updated_docs.append(path)
 
-        if len(tokens) >= 4 and tokens[1] in BODY_LABELS:
-            body = tokens[1]
-            number = tokens[2]
-            year = tokens[3]
         else:
-            number = tokens[1]
-            year = tokens[2]
-    elif tokens[0] == "memorando" and len(tokens) >= 5 and tokens[1] == "circular":
-        document_type = "memorando_circular"
+            unchanged_docs.append(path)
 
-        if tokens[2] in BODY_LABELS:
-            body = tokens[2]
-            number = tokens[3]
-            year = tokens[4]
-    elif tokens[0] == "portaria" and len(tokens) >= 4:
-        document_type = "portaria"
-        body = tokens[1]
-        number = tokens[2]
-        year = tokens[3]
-    elif tokens[0] == "decreto" and len(tokens) >= 3 and tokens[1].isdigit() and tokens[2].isdigit():
-        document_type = "decreto"
-        number = tokens[1]
-        year = tokens[2]
-    elif tokens[0] == "lei" and len(tokens) >= 2 and tokens[1].isdigit():
-        document_type = "lei"
-        number = tokens[1]
+    for stored in manifest:
 
-    if not document_type or not number:
-        return build_fallback_source_title(file_path)
+        if stored not in current_hashes:
+            removed_docs.append(stored)
 
-    number_text = format_document_number(number)
-
-    if not number_text:
-        return build_fallback_source_title(file_path)
-
-    title = DOC_TYPE_LABELS.get(document_type, document_type.upper())
-
-    if body in BODY_LABELS:
-        title = f"{title} DO {BODY_LABELS[body]}"
-
-    if year and str(year).isdigit() and len(str(year)) == 4:
-        return f"{title} Nº {number_text}/{year}"
-
-    return f"{title} Nº {number_text}"
+    return manifest, current_hashes, new_docs, updated_docs, removed_docs, unchanged_docs
 
 
-def load_documents(pdf_paths, root_folder):
+# ================================
+# LOAD DOCUMENTS
+# ================================
+
+def load_documents(paths):
 
     documents = []
-    failed_files = []
+    failed = []
 
-    for file_path in pdf_paths:
+    for path in paths:
 
         try:
-            loader = PyMuPDFLoader(str(file_path))
-            pages = loader.load()
-        except Exception as exc:
-            failed_files.append(
-                {
-                    "source": build_source_title(file_path),
-                    "source_file": to_posix_relative(file_path, root_folder),
-                    "source_path": str(Path(file_path).resolve()),
-                    "reason": str(exc)
-                }
-            )
-            continue
 
-        source = build_source_title(file_path)
-        source_file = to_posix_relative(file_path, root_folder)
-        source_path = str(Path(file_path).resolve())
+            loader = PyPDFLoader(path)
 
-        for doc in pages:
+            docs = loader.load()
 
-            text = (doc.page_content or "").strip()
+            source_file = Path(path).name
 
-            if text:
-                doc.page_content = " ".join(text.split())
-                doc.metadata["source"] = source
+            for doc in docs:
+
+                doc.metadata["document_id"] = source_file
                 doc.metadata["source_file"] = source_file
-                doc.metadata["source_path"] = source_path
-                documents.append(doc)
+                doc.metadata["source_path"] = normalize_path(path)
 
-    return documents, failed_files
+            documents.extend(docs)
 
+            logging.info(f"Loaded: {path}")
 
-def build_ingestion_audit(pdf_paths, documents, chunks, failed_files, vector_count, extracted_folder):
+        except Exception as e:
 
-    discovered_files = [to_posix_relative(path, extracted_folder) for path in pdf_paths]
-    expected_files = {normalize_path(path) for path in pdf_paths}
+            logging.error(f"Error loading {path}: {e}")
+            failed.append(path)
 
-    used_files = sorted(
-        {
-            doc.metadata.get("source_file", "unknown")
-            for doc in documents
-            if doc.metadata.get("source_file")
-        }
-    )
-
-    used_sources = sorted(
-        {
-            doc.metadata.get("source", "unknown")
-            for doc in documents
-            if doc.metadata.get("source")
-        }
-    )
-
-    used_file_paths = {
-        normalize_path(doc.metadata["source_path"])
-        for doc in documents
-        if doc.metadata.get("source_path")
-    }
-
-    failed_file_paths = {
-        normalize_path(item["source_path"])
-        for item in failed_files
-        if item.get("source_path")
-    }
-
-    chunk_file_paths = [
-        chunk.metadata.get("source_path", "unknown")
-        for chunk in chunks
-    ]
-    loaded_chunks = {
-        normalize_path(source_path)
-        for source_path in chunk_file_paths
-        if source_path != "unknown"
-    }
-
-    skipped_no_text_files = sorted(
-        discovered_file
-        for discovered_file in discovered_files
-        if normalize_path(Path(extracted_folder) / discovered_file) not in used_file_paths
-        and normalize_path(Path(extracted_folder) / discovered_file) not in failed_file_paths
-    )
-
-    missing_in_documents = sorted(
-        to_posix_relative(path, extracted_folder)
-        for path in pdf_paths
-        if normalize_path(path) not in used_file_paths
-    )
-    missing_in_chunks = sorted(
-        to_posix_relative(path, extracted_folder)
-        for path in pdf_paths
-        if normalize_path(path) not in loaded_chunks
-    )
-    docs_without_chunks = sorted(
-        source
-        for source in used_files
-        if normalize_path(Path(extracted_folder) / source) not in loaded_chunks
-    )
-
-    chunks_per_file = Counter(
-        chunk.metadata.get("source_file", "unknown")
-        for chunk in chunks
-    )
-
-    return {
-        "timestamp": str(time.strftime("%Y-%m-%d %H:%M:%S")),
-        "zip_file": str(Path(ZIP_FILE).resolve()),
-        "extracted_folder": str(Path(extracted_folder).resolve()),
-        "index": {
-            "name": INDEX_NAME,
-            "dimension": INDEX_DIMENSION,
-            "metric": INDEX_METRIC,
-            "cloud": INDEX_CLOUD,
-            "region": INDEX_REGION,
-            "total_vector_count": vector_count
-        },
-        "counts": {
-            "expected_pdfs": len(expected_files),
-            "pdfs_loaded_into_documents": len(used_file_paths),
-            "pdfs_present_in_chunks": len(loaded_chunks),
-            "total_pages_in_documents": len(documents),
-            "total_chunks": len(chunks),
-            "files_skipped_no_text": len(skipped_no_text_files),
-            "files_with_loader_errors": len(failed_files),
-            "missing_in_documents": len(missing_in_documents),
-            "missing_in_chunks": len(missing_in_chunks),
-            "loaded_without_chunks": len(docs_without_chunks)
-        },
-        "files": {
-            "discovered": discovered_files,
-            "used": used_files,
-            "used_sources": used_sources,
-            "skipped_no_text": skipped_no_text_files,
-            "missing_in_documents": missing_in_documents,
-            "missing_in_chunks": missing_in_chunks,
-            "loaded_without_chunks": docs_without_chunks,
-            "failed": failed_files
-        },
-        "chunks_per_file": [
-            {"source_file": source, "chunk_count": count}
-            for source, count in chunks_per_file.most_common()
-        ]
-    }
+    return documents, failed
 
 
-def print_audit_summary(audit_report):
+# ================================
+# SPLIT DOCUMENTS
+# ================================
 
-    counts = audit_report["counts"]
-
-    print(f"ZIP extraido para: {audit_report['extracted_folder']}")
-    print(f"PDF files discovered: {counts['expected_pdfs']}")
-    print("=== COUNTS ===")
-    print("Expected PDFs (ZIP):", counts["expected_pdfs"])
-    print("PDFs loaded into documents:", counts["pdfs_loaded_into_documents"])
-    print("PDFs present in chunks:", counts["pdfs_present_in_chunks"])
-    print("Total pages in documents:", counts["total_pages_in_documents"])
-    print("Total chunks:", counts["total_chunks"])
-    print("Files skipped (no extractable text):", counts["files_skipped_no_text"])
-    print("Files with loader errors:", counts["files_with_loader_errors"])
-    print("Total vectors in Pinecone:", audit_report["index"]["total_vector_count"])
-
-    print("\n=== FILES USED ===")
-    for source_file in audit_report["files"]["used"]:
-        print("-", source_file)
-
-    if audit_report["files"]["skipped_no_text"]:
-        print("\n=== FILES SKIPPED (NO EXTRACTABLE TEXT) ===")
-        for source in audit_report["files"]["skipped_no_text"]:
-            print("-", source)
-
-    if audit_report["files"]["failed"]:
-        print("\n=== LOADER FAILURES ===")
-        for item in audit_report["files"]["failed"][:10]:
-            print("-", item["source_file"], "->", item["reason"])
-
-    print("\n=== CHUNKS PER FILE ===")
-    for item in audit_report["chunks_per_file"]:
-        print(item["chunk_count"], "-", item["source_file"])
-
-
-def ingest():
-
-    path = extract_zip()
-    index = recreate_index(INDEX_NAME)
-    pdf_paths = discover_pdf_paths(path)
-
-    documents, failed_files = load_documents(pdf_paths, path)
+def split_documents(documents):
 
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=150
+        chunk_size=CHUNK_SIZE,
+        chunk_overlap=CHUNK_OVERLAP
     )
 
     chunks = splitter.split_documents(documents)
 
+    logging.info(f"Chunks generated: {len(chunks)}")
+
+    return chunks
+
+
+# ================================
+# DOCUMENT AUDIT
+# ================================
+
+def document_audit(pdf_paths, documents, chunks, failed):
+
+    doc_files = set()
+    chunk_files = set()
+
+    pages_per_file = defaultdict(int)
+    chunks_per_file = defaultdict(int)
+
+    for d in documents:
+
+        source = d.metadata["source_path"]
+
+        doc_files.add(source)
+        pages_per_file[source] += 1
+
+    for c in chunks:
+
+        source = c.metadata["source_path"]
+
+        chunk_files.add(source)
+        chunks_per_file[source] += 1
+
+    skipped = set(pdf_paths) - doc_files
+
+    logging.info("")
+    logging.info("=== COUNTS ===")
+
+    logging.info(f"Expected PDFs (ZIP): {len(pdf_paths)}")
+    logging.info(f"PDFs loaded into documents: {len(doc_files)}")
+    logging.info(f"PDFs present in chunks: {len(chunk_files)}")
+
+    total_pages = sum(pages_per_file.values())
+
+    logging.info(f"Total pages in documents: {total_pages}")
+    logging.info(f"Total chunks: {len(chunks)}")
+
+    logging.info(f"Files skipped (no extractable text): {len(skipped)}")
+    logging.info(f"Files with loader errors: {len(failed)}")
+
+    logging.info("")
+    logging.info("=== MISSING FILES ===")
+
+    missing_docs = set(pdf_paths) - doc_files
+    missing_chunks = set(pdf_paths) - chunk_files
+    no_chunks = doc_files - chunk_files
+
+    logging.info(f"Missing in documents: {len(missing_docs)}")
+    logging.info(f"Missing in chunks: {len(missing_chunks)}")
+    logging.info(f"Loaded but without chunks: {len(no_chunks)}")
+
+    logging.info("")
+    logging.info("=== FILES USED ===")
+
+    for f in sorted(doc_files):
+        logging.info(f"- {Path(f).name}")
+
+    logging.info("")
+    logging.info("=== FILES SKIPPED (NO EXTRACTABLE TEXT) ===")
+
+    for f in sorted(skipped):
+        logging.info(f"- {Path(f).name}")
+
+    logging.info("")
+    logging.info("First files missing in documents:")
+
+    for f in list(missing_docs)[:10]:
+        logging.info(f"- {f}")
+
+    logging.info("")
+    logging.info("First files missing in chunks:")
+
+    for f in list(missing_chunks)[:10]:
+        logging.info(f"- {f}")
+
+    logging.info("")
+    logging.info("=== CHUNKS PER FILE ===")
+
+    sorted_chunks = sorted(
+        chunks_per_file.items(),
+        key=lambda x: x[1],
+        reverse=True
+    )
+
+    for file, count in sorted_chunks:
+        logging.info(f"{count} - {Path(file).name}")
+
+
+# ================================
+# UPSERT
+# ================================
+
+def upsert_chunks(index, chunks, embeddings):
+
+    vectors = []
+
+    for chunk in chunks:
+
+        text = chunk.page_content
+
+        chunk_hash = content_hash(text)
+
+        vector_id = f"{chunk.metadata['document_id']}_{chunk_hash}"
+
+        embedding = embeddings.embed_query(text)
+
+        vectors.append({
+            "id": vector_id,
+            "values": embedding,
+            "metadata": {
+                **chunk.metadata,
+                "chunk_hash": chunk_hash
+            }
+        })
+
+        if len(vectors) >= UPSERT_BATCH:
+
+            index.upsert(vectors=vectors)
+
+            logging.info(f"Upsert batch: {len(vectors)}")
+
+            vectors = []
+
+    if vectors:
+
+        index.upsert(vectors=vectors)
+
+        logging.info(f"Upsert batch: {len(vectors)}")
+
+
+# ================================
+# DELETE DOCUMENT
+# ================================
+
+def delete_document(index, document_id):
+
+    logging.info(f"Deleting document: {document_id}")
+
+    index.delete(filter={"document_id": document_id})
+
+
+# ================================
+# INGEST
+# ================================
+
+def ingest():
+
+    logging.info("Starting ingestion")
+
+    if ZIP_PATH.exists():
+        logging.info(f"ZIP detected, extracting: {ZIP_PATH}")
+        extracted = extract_zip()
+        logging.info(f"ZIP extracted to: {extracted}")
+    else:
+        logging.info(f"ZIP not found, using existing docs folder: {DOCS_PATH}")
+
+    pdf_paths = discover_pdf_paths(DOCS_PATH)
+
+    if not pdf_paths:
+        raise RuntimeError(f"No PDF files found under {DOCS_PATH}")
+
+    manifest, hashes, new_docs, updated_docs, removed_docs, unchanged_docs = detect_document_changes(pdf_paths)
+
+    logging.info("=== DOCUMENT STATUS ===")
+
+    logging.info(f"NEW: {len(new_docs)}")
+    logging.info(f"UPDATED: {len(updated_docs)}")
+    logging.info(f"REMOVED: {len(removed_docs)}")
+    logging.info(f"UNCHANGED: {len(unchanged_docs)}")
+
+    pc = Pinecone(api_key=PINECONE_API_KEY)
+
+    created_index = ensure_index_exists(pc)
+
+    if created_index:
+        logging.info(f"Pinecone index created: {INDEX_NAME}")
+
+    index = pc.Index(INDEX_NAME)
+
+    before_vectors = pinecone_audit(index, "BEFORE INGESTION")
+
     embeddings = OpenAIEmbeddings(
-        model="text-embedding-3-large"
+        model="text-embedding-3-large",
+        api_key=OPENAI_API_KEY
     )
 
-    PineconeVectorStore.from_documents(
-        chunks,
-        embeddings,
-        index_name=INDEX_NAME
-    )
+    for removed in removed_docs:
 
-    stats = index.describe_index_stats()
-    vector_count = stats.get("total_vector_count", 0)
+        delete_document(index, Path(removed).name)
 
-    audit_report = build_ingestion_audit(
-        pdf_paths=pdf_paths,
-        documents=documents,
-        chunks=chunks,
-        failed_files=failed_files,
-        vector_count=vector_count,
-        extracted_folder=path
-    )
+    for updated in updated_docs:
 
-    log_ingestion_audit(audit_report)
-    print_audit_summary(audit_report)
+        delete_document(index, Path(updated).name)
 
-    print("Indexação concluída")
-    print("Auditoria salva em logs/ingestion_audit_latest.json e logs/ingestion_audit.jsonl")
+    docs_to_process = new_docs + updated_docs
 
+    # If index is empty but manifest says unchanged, force a full backfill.
+    if not docs_to_process and before_vectors == 0 and unchanged_docs:
+        logging.info("Index is empty; forcing full reindex from unchanged documents")
+        docs_to_process = unchanged_docs
+
+    if docs_to_process:
+
+        documents, failed = load_documents(docs_to_process)
+
+        chunks = split_documents(documents)
+
+        document_audit(pdf_paths, documents, chunks, failed)
+
+        upsert_chunks(index, chunks, embeddings)
+
+    else:
+
+        logging.info("No documents to process")
+
+    new_manifest = {}
+
+    for path in pdf_paths:
+
+        norm = normalize_path(path)
+
+        new_manifest[norm] = {
+            "hash": hashes[norm]
+        }
+
+    save_manifest(new_manifest)
+
+    logging.info("Manifest updated")
+
+    after_vectors = pinecone_audit(index, "AFTER INGESTION")
+    logging.info(f"PINECONE DELTA VECTORS: {after_vectors - before_vectors}")
+
+    logging.info("Ingestion completed")
+
+
+# ================================
+# MAIN
+# ================================
 
 if __name__ == "__main__":
+
+    setup_logger()
+
     ingest()
