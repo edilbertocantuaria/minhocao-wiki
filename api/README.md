@@ -2,22 +2,19 @@
 
 Backend FastAPI responsavel por autenticacao, gerenciamento de conversas e respostas RAG em streaming.
 
-## Documentacao de Endpoints
-
-Documentacao completa e atualizada da API:
-
-- `api/docs/api-doc.md`
-
-Use esse arquivo como referencia principal de contratos HTTP, exemplos e codigos de erro.
-
-## Responsabilidades da API
+## Escopo deste modulo
 
 1. Cadastro e login com JWT.
-2. Login com Google (`/auth/google`).
-3. CRUD basico de conversas (criar, listar, obter mensagens, deletar).
-4. Endpoint de chat em streaming (`/chat`).
+2. Login com Google (`POST /auth/google`).
+3. Conversas: criar, listar, obter mensagens e deletar.
+4. Chat com streaming (`POST /chat`).
 5. Persistencia em PostgreSQL.
-6. Integracao com pipeline RAG (LangChain + Pinecone + OpenAI).
+6. Integracao RAG com OpenAI + Pinecone.
+
+## Documentacao de referencia
+
+- Endpoints e contratos HTTP: `docs/api-doc.md`
+- Operacao de ingestao: `docs/ingest-instruction.md`
 
 ## Stack
 
@@ -28,17 +25,17 @@ Use esse arquivo como referencia principal de contratos HTTP, exemplos e codigos
 - Pinecone
 - OpenAI
 
-Dependencias completas em `api/requirements.txt`.
+Dependencias completas em `requirements.txt`.
 
-## Estrutura
+## Estrutura principal
 
 ```text
 api/
 ├── app/
-│   ├── main.py                 # Inicializacao FastAPI
-│   ├── config.py               # Leitura de config/env
-│   ├── auth.py                 # JWT e password hashing
-│   ├── models.py               # Modelos SQLAlchemy
+│   ├── main.py
+│   ├── config.py
+│   ├── auth.py
+│   ├── models.py
 │   ├── routers/
 │   │   ├── auth.py
 │   │   ├── conversations.py
@@ -46,45 +43,49 @@ api/
 │   └── services/
 │       ├── chat_service.py
 │       └── conversation_service.py
-├── docs/
-│   └── api-doc.md
 ├── ingestion/
 │   └── ingest_documents.py
-├── tests/
-└── config.yaml.exemple
+├── docs/
+├── logs/
+└── tests/
 ```
 
 ## Configuracao
 
-Existem duas fontes de configuracao:
+A API le configuracao em duas camadas:
 
-1. `config.yaml` (base)
-2. Variaveis de ambiente (sobrescrevem o `config.yaml`)
+1. `config.yaml`
+2. Variaveis de ambiente (com prioridade)
 
-Campos mais importantes:
+Campos obrigatorios para RAG:
 
 - `OPENAI_API_KEY`
 - `PINECONE_API_KEY`
 - `INDEX_NAME`
+
+Campos importantes de runtime:
+
 - `DATABASE_URL`
 - `JWT_SECRET_KEY`
+- `JWT_ALGORITHM` (padrao: `HS256`)
+- `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` (padrao: `60`)
 - `GOOGLE_CLIENT_ID`
 
-Exemplo base em `api/config.yaml.exemple`.
+Use `config.yaml.exemple` como base.
 
-## Execucao Local (sem Docker)
+## Execucao local (sem Docker)
 
-1. Criar venv e instalar dependencias:
+1. Criar ambiente e instalar dependencias:
 
 ```bash
 cd api
 python -m venv .venv
 source .venv/bin/activate  # Linux/macOS
-# .venv\Scripts\activate   # Windows
+# .venv\Scripts\activate   # Windows PowerShell
 pip install -r requirements.txt
 ```
 
-2. Ajustar `config.yaml` (ou env vars).
+2. Criar `config.yaml` (copiando de `config.yaml.exemple`) e preencher as chaves.
 
 3. Subir API:
 
@@ -92,68 +93,63 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-4. Acessar Swagger: `http://localhost:8000/docs`.
+4. Validar:
+
+- Swagger: `http://localhost:8000/docs`
+- Health basico: endpoint raiz da API (via docs)
 
 ## Execucao com Docker Compose
 
-No root do projeto:
+No diretorio raiz do repositorio:
 
 ```bash
 docker compose up -d --build
 ```
 
-Nesse fluxo, a ingestao e executada automaticamente no startup do container da API, antes do Uvicorn.
+Comportamento atual:
 
-Agora a ingestao roda em paralelo no servico `ingest-worker` e a API permanece disponivel durante as atualizacoes.
+- O container `api` sobe rapidamente e fica disponivel.
+- A ingestao roda em paralelo no servico `ingest-worker`.
+- Intervalo padrao do worker: `INGEST_INTERVAL_SECONDS=7200`.
 
-Intervalo padrao do worker: 2 horas (`INGEST_INTERVAL_SECONDS=7200`).
-
-Para alterar o intervalo (exemplo 1 hora):
-
-```bash
-INGEST_INTERVAL_SECONDS=3600 docker compose up -d --build
-```
-
-Para acompanhar o progresso da ingestao em tempo real:
+Para acompanhar ingestao:
 
 ```bash
 docker compose logs -f ingest-worker
 ```
 
-## Ingestao de Documentos
+## Ingestao RAG
 
-Comando:
+Execucao manual (a partir de `api/`):
 
 ```bash
-cd api
 python ingestion/ingest_documents.py
 ```
 
-Esse processo prepara o indice vetorial e registra auditoria em `api/logs/`.
+Execucao manual via compose:
 
-Comportamento incremental (padrao):
+```bash
+docker compose run --rm ingest-worker python ingestion/ingest_documents.py
+```
 
-- Novo documento: adiciona vetores do novo PDF.
-- Documento atualizado: remove vetores antigos desse arquivo e indexa novamente.
-- Documento removido: remove vetores desse arquivo do Pinecone.
-- Documento inalterado: não reprocessa.
-- Se `api/docs/unb` ja existir com arquivos, a ingestao reutiliza a pasta descompactada para evitar sobreposicao.
+Comportamento incremental:
 
-Estado da ingestao:
+- Novo PDF: adiciona vetores.
+- PDF atualizado: remove vetores antigos do arquivo e reindexa.
+- PDF removido: remove vetores desse arquivo.
+- PDF inalterado: nao reprocessa.
 
-- Manifesto salvo em `api/logs/ingestion_manifest.json`.
-- Auditoria em `api/logs/ingestion_audit_latest.json` e `api/logs/ingestion_audit.jsonl`.
-- Resumo textual em `api/logs/ingestion_YYYYMMDD_HHMMSS.txt`.
+Arquivos de auditoria gerados em `logs/`:
 
-Para forcar rebuild completo do indice (apaga e recria):
+- `ingestion_manifest.json`
+- `ingestion_audit_latest.json`
+- `ingestion_audit.jsonl`
+- `ingestion_YYYYMMDD_HHMMSS.txt`
+
+Flags uteis:
 
 ```bash
 INGEST_FORCE_RECREATE_INDEX=true python ingestion/ingest_documents.py
-```
-
-Para forcar reextracao do ZIP mesmo com pasta ja descompactada:
-
-```bash
 INGEST_FORCE_EXTRACT=true python ingestion/ingest_documents.py
 ```
 
@@ -163,3 +159,12 @@ INGEST_FORCE_EXTRACT=true python ingestion/ingest_documents.py
 cd api
 pytest
 ```
+
+## Troubleshooting rapido
+
+1. `Database unavailable`:
+	valide `DATABASE_URL` e conectividade com PostgreSQL.
+2. `Google authentication is not configured`:
+	configure `GOOGLE_CLIENT_ID`.
+3. Erro de indexacao RAG:
+	confira chaves OpenAI/Pinecone e logs em `logs/`.

@@ -1,6 +1,6 @@
 # Instrucoes de Ingestao (RAG)
 
-Este guia centraliza como a ingestao esta configurada no projeto, como acompanhar progresso, como disparar manualmente e como operar sem indisponibilizar a API.
+Este guia descreve como a ingestao esta configurada, como monitorar execucoes e como operar sem indisponibilizar a API.
 
 ## Objetivo
 
@@ -12,7 +12,7 @@ Este guia centraliza como a ingestao esta configurada no projeto, como acompanha
 
 A ingestao roda em um servico dedicado no Docker Compose:
 
-- Servico: ingest-worker
+- Servico: `ingest-worker`
 - Comportamento: loop infinito
 - Frequencia padrao: a cada 2 horas (7200 segundos)
 - API: permanece disponivel durante toda a ingestao
@@ -37,7 +37,7 @@ Esse comando sobe:
 
 Padrao:
 
-- INGEST_INTERVAL_SECONDS=7200
+- `INGEST_INTERVAL_SECONDS=7200`
 
 Exemplo para alterar para 1 hora:
 
@@ -55,7 +55,7 @@ docker compose run --rm ingest-worker python ingestion/ingest_documents.py
 
 Observacoes:
 
-- O container dessa execucao manual e removido ao finalizar (flag --rm).
+- O container dessa execucao manual e removido ao finalizar (flag `--rm`).
 - Evite executar manualmente ao mesmo tempo que o ciclo automatico esta rodando.
 
 Fluxo seguro para evitar concorrencia:
@@ -74,7 +74,7 @@ Ver logs do worker:
 docker compose logs -f ingest-worker
 ```
 
-A ingestao imprime progresso por etapas no formato [n/11] e progresso por item nas fases principais.
+A ingestao imprime progresso por etapas no formato `[n/11]` e detalhes por item nas fases principais.
 
 ## Comportamento incremental
 
@@ -87,8 +87,8 @@ A ingestao processa somente o delta:
 
 ## Regras de extracao do ZIP
 
-- ZIP esperado: api/unb.zip
-- Pasta de destino: api/docs/unb
+- ZIP esperado: `api/unb.zip`
+- Pasta de destino: `api/docs/unb`
 - Se a pasta ja existir e tiver conteudo, ela e reutilizada (sem reextrair), para evitar sobrescrita.
 
 Para forcar reextracao:
@@ -112,13 +112,13 @@ INGEST_FORCE_RECREATE_INDEX=true python ingestion/ingest_documents.py
 A cada execucao sao gerados:
 
 - Manifesto incremental:
-  - api/logs/ingestion_manifest.json
+  - `api/logs/ingestion_manifest.json`
 - Auditoria JSON (historico):
-  - api/logs/ingestion_audit.jsonl
+  - `api/logs/ingestion_audit.jsonl`
 - Auditoria JSON (ultimo estado):
-  - api/logs/ingestion_audit_latest.json
+  - `api/logs/ingestion_audit_latest.json`
 - Resumo textual por execucao:
-  - api/logs/ingestion_YYYYMMDD_HHMMSS.txt
+  - `api/logs/ingestion_YYYYMMDD_HHMMSS.txt`
 
 ## O que a auditoria mostra
 
@@ -136,13 +136,13 @@ A cada execucao sao gerados:
 ## Troubleshooting rapido
 
 1. Nao vejo progresso:
-- Use docker compose logs -f ingest-worker.
+- Use `docker compose logs -f ingest-worker`.
 
 2. Quero rodar na hora:
-- Use docker compose run --rm ingest-worker python ingestion/ingest_documents.py.
+- Use `docker compose run --rm ingest-worker python ingestion/ingest_documents.py`.
 
 3. Quero evitar conflito entre auto e manual:
 - Pare o worker automatico antes da execucao manual e religue ao final.
 
-4. Mudancas não refletiram como esperado:
-- Verifique api/logs/ingestion_audit_latest.json e o arquivo txt mais recente em api/logs.
+4. Mudancas nao refletiram como esperado:
+- Verifique `api/logs/ingestion_audit_latest.json` e o arquivo txt mais recente em `api/logs`.

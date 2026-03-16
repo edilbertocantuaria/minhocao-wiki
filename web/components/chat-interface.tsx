@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Sparkles, LogOut } from 'lucide-react'
+import { LogIn, LogOut, UserPlus } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
 import { ChatSidebar, type ChatHistory } from './chat-sidebar'
 import { ChatMessage, type Message } from './chat-message'
@@ -35,7 +35,7 @@ export function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([])
   const [chatMessages, setChatMessages] = useState<Record<string, Message[]>>({})
   const [isLoading, setIsLoading] = useState(false)
-  const [isLoadingConversations, setIsLoadingConversations] = useState(true)
+  const [isLoadingConversations, setIsLoadingConversations] = useState(false)
   const [currentChatId, setCurrentChatId] = useState<string | null>(null)
   const [history, setHistory] = useState<ChatHistory[]>([])
   const [parameters, setParameters] = useState({
@@ -62,16 +62,18 @@ export function ChatInterface() {
     currentChatIdRef.current = currentChatId
   }, [currentChatId])
 
-  // Redirecionar para login se não autenticado
   useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      router.push('/login')
+    if (!isAuthenticated) {
+      setIsLoadingConversations(false)
     }
-  }, [authLoading, isAuthenticated, router])
+  }, [isAuthenticated])
 
   // Carregar conversas do backend
   const loadConversations = useCallback(async () => {
-    if (!token) return
+    if (!token) {
+      setIsLoadingConversations(false)
+      return
+    }
 
     setIsLoadingConversations(true)
 
@@ -208,7 +210,21 @@ export function ChatInterface() {
   }
 
   const handleDeleteChat = async (id: string) => {
-    if (!token) return
+    if (!token) {
+      setHistory((prev) => prev.filter((chat) => chat.id !== id))
+      setChatMessages((prev) => {
+        const nextState = { ...prev }
+        delete nextState[id]
+        return nextState
+      })
+
+      if (currentChatId === id) {
+        setCurrentChatId(null)
+        setMessages([])
+      }
+
+      return
+    }
 
     try {
       const response = await fetch(`/api/conversations/${id}`, {
@@ -240,46 +256,58 @@ export function ChatInterface() {
   }
 
   const handleSendMessage = async (content: string) => {
-    if (!token) return
-
     let chatId = currentChatId
 
     // Se não há conversa atual, criar uma nova
     if (!chatId) {
-      try {
-        const response = await fetch('/api/conversations', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify({ title: null }),
-        })
+      if (isAuthenticated && token) {
+        try {
+          const response = await fetch('/api/conversations', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ title: null }),
+          })
 
-        if (response.status === 401) {
-          logout()
-          return
-        }
-
-        if (response.ok) {
-          const conversation: APIConversation = await response.json()
-          chatId = conversation.id
-
-          const newChat: ChatHistory = {
-            id: conversation.id,
-            title: 'Gerando titulo...',
-            createdAt: new Date(conversation.created_at),
+          if (response.status === 401) {
+            logout()
+            return
           }
 
-          setHistory((prev) => [newChat, ...prev])
-          setCurrentChatId(chatId)
-          currentChatIdRef.current = chatId
-        } else {
-          throw new Error('Erro ao criar conversa')
+          if (response.ok) {
+            const conversation: APIConversation = await response.json()
+            chatId = conversation.id
+
+            const newChat: ChatHistory = {
+              id: conversation.id,
+              title: 'Gerando titulo...',
+              createdAt: new Date(conversation.created_at),
+            }
+
+            setHistory((prev) => [newChat, ...prev])
+            setCurrentChatId(chatId)
+            currentChatIdRef.current = chatId
+          } else {
+            throw new Error('Erro ao criar conversa')
+          }
+        } catch (error) {
+          console.error('Erro ao criar conversa:', error)
+          return
         }
-      } catch (error) {
-        console.error('Erro ao criar conversa:', error)
-        return
+      } else {
+        chatId = `guest-${Date.now()}`
+        const localTitle = content.length > 40 ? `${content.slice(0, 40)}...` : content
+        const newChat: ChatHistory = {
+          id: chatId,
+          title: localTitle,
+          createdAt: new Date(),
+        }
+
+        setHistory((prev) => [newChat, ...prev])
+        setCurrentChatId(chatId)
+        currentChatIdRef.current = chatId
       }
     }
 
@@ -304,17 +332,33 @@ export function ChatInterface() {
     setIsLoading(true)
 
     try {
+      const requestHeaders: HeadersInit = {
+        'Content-Type': 'application/json',
+      }
+
+      if (token) {
+        requestHeaders.Authorization = `Bearer ${token}`
+      }
+
+      const requestBody = isAuthenticated && token
+        ? {
+            conversation_id: chatId,
+            question: content,
+            ...parameters,
+          }
+        : {
+            question: content,
+            history: existingMessages.map((message) => ({
+              role: message.role,
+              content: message.content,
+            })),
+            ...parameters,
+          }
+
       const response = await fetch('/api/chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          conversation_id: chatId,
-          question: content,
-          ...parameters,
-        }),
+        headers: requestHeaders,
+        body: JSON.stringify(requestBody),
       })
 
       if (response.status === 401) {
@@ -342,7 +386,9 @@ export function ChatInterface() {
         throw new Error(errorMessage)
       }
 
-      await syncConversationTitle(chatId)
+      if (isAuthenticated && token) {
+        await syncConversationTitle(chatId)
+      }
 
       if (!response.body) {
         throw new Error('A API não retornou corpo de resposta.')
@@ -394,7 +440,11 @@ export function ChatInterface() {
 
   const handleLogout = () => {
     logout()
-    router.push('/login')
+    setCurrentChatId(null)
+    currentChatIdRef.current = null
+    setMessages([])
+    setChatMessages({})
+    setHistory([])
   }
 
   // Loading screen
@@ -404,11 +454,6 @@ export function ChatInterface() {
         <Spinner className="size-8" />
       </div>
     )
-  }
-
-  // Se não está autenticado, não renderizar nada (será redirecionado)
-  if (!isAuthenticated) {
-    return null
   }
 
   return (
@@ -439,7 +484,7 @@ export function ChatInterface() {
             <h1 className="font-semibold text-foreground">Minhocão Wiki</h1>
           </div>
           <div className="flex items-center gap-1">
-            {user?.email && (
+            {isAuthenticated && user?.email && (
               <span className="text-sm text-muted-foreground mr-2 hidden sm:inline">
                 {user.email}
               </span>
@@ -449,15 +494,38 @@ export function ChatInterface() {
               onParametersChange={setParameters}
             />
             <ThemeToggle />
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleLogout}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <LogOut className="size-5" />
-              <span className="sr-only">Sair</span>
-            </Button>
+            {isAuthenticated ? (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleLogout}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <LogOut className="size-5" />
+                <span className="sr-only">Sair</span>
+              </Button>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => router.push('/login')}
+                  className="hidden sm:inline-flex"
+                >
+                  <LogIn className="size-4" />
+                  Entrar
+                </Button>
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => router.push('/register')}
+                  className="hidden sm:inline-flex"
+                >
+                  <UserPlus className="size-4" />
+                  Cadastrar
+                </Button>
+              </>
+            )}
           </div>
         </header>
 

@@ -2,12 +2,12 @@
 
 Frontend Next.js da aplicacao, com autenticacao, historico de conversas e interface de chat em streaming.
 
-## O que este modulo faz
+## Escopo deste modulo
 
-1. Fluxo de login/cadastro por email e Google.
-2. Consumo da API via rotas proxy em `app/api/*`.
-3. Renderizacao incremental da resposta de chat (streaming).
-4. Sidebar com historico de conversas.
+1. Login/cadastro por email e login Google.
+2. Proxy para a API por meio de rotas internas `app/api/*`.
+3. Interface de chat com renderizacao incremental da resposta.
+4. Sidebar com gerenciamento de conversas.
 
 ## Stack
 
@@ -17,44 +17,40 @@ Frontend Next.js da aplicacao, com autenticacao, historico de conversas e interf
 - Tailwind CSS
 - shadcn/ui + Radix UI
 
-## Estrutura
+## Estrutura principal
 
 ```text
 web/
 ├── app/
+│   ├── page.tsx
 │   ├── login/page.tsx
 │   ├── register/page.tsx
-│   ├── page.tsx
 │   └── api/
 │       ├── auth/
 │       ├── chat/
 │       └── conversations/
 ├── components/
-│   ├── chat-interface.tsx
-│   ├── chat-sidebar.tsx
-│   ├── chat-input.tsx
-│   └── google-signin-button.tsx
 ├── contexts/
-│   └── auth-context.tsx
+├── hooks/
 └── package.json
 ```
 
-## Variaveis de Ambiente
+## Variaveis de ambiente
 
 Arquivo local: `web/.env.local`
-
-Exemplo:
 
 ```dotenv
 API_BASE_URL=http://localhost:8000
 NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
 ```
 
-Observação:
+Notas:
 
-- Em Docker, `NEXT_PUBLIC_GOOGLE_CLIENT_ID` entra no build via `ARG` no `Dockerfile` e `docker-compose.yml`.
+- `API_BASE_URL` e usada pelas rotas proxy em `app/api/*`.
+- Em Docker Compose, o valor padrao e `http://api:8000`.
+- `NEXT_PUBLIC_GOOGLE_CLIENT_ID` e injetada no build do web via `docker-compose.yml`.
 
-## Rodando em Desenvolvimento
+## Rodando em desenvolvimento
 
 ```bash
 cd web
@@ -66,24 +62,40 @@ Acesse: `http://localhost:3000`.
 
 ## Rodando com Docker Compose
 
-No root:
+No diretorio raiz do projeto:
 
 ```bash
 docker compose up -d --build web api db
 ```
 
-## Fluxo de Integracao com API
+Para subir todo o ambiente (incluindo pgadmin e ingest-worker):
 
-1. O browser chama rotas internas Next (`/api/...`).
-2. Essas rotas fazem proxy para `http://api:8000` no ambiente Docker.
-3. Token JWT fica em `sessionStorage` no cliente.
-4. Requisicoes autenticadas incluem `Authorization: Bearer <token>`.
+```bash
+docker compose up -d --build
+```
 
-## Build e Lint
+## Fluxo de integracao com API
+
+1. Browser chama as rotas Next internas (`/api/...`).
+2. Cada rota interna encaminha a requisicao para a API FastAPI (`API_BASE_URL`).
+3. O token JWT e gerenciado no cliente e enviado no header `Authorization`.
+4. No chat, o proxy repassa o streaming da API para o browser.
+
+## Scripts
 
 ```bash
 cd web
+pnpm dev
 pnpm lint
 pnpm build
 pnpm start
 ```
+
+## Troubleshooting rapido
+
+1. Erro de conexao com a API no frontend:
+	confira `API_BASE_URL` e se a API esta acessivel.
+2. Botao Google indisponivel:
+	valide `NEXT_PUBLIC_GOOGLE_CLIENT_ID`.
+3. Falha no build Docker do web:
+	confirme se `GOOGLE_CLIENT_ID` esta definido no `.env` da raiz.

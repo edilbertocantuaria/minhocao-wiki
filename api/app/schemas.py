@@ -39,6 +39,12 @@ class MessageResponse(BaseModel):
     created_at: datetime
 
 
+class ChatHistoryItem(BaseModel):
+    role: str = Field(pattern="^(user|assistant)$")
+    content: str = Field(min_length=1)
+
+
 class ChatRequest(BaseModel):
-    conversation_id: str
+    conversation_id: str | None = None
     question: str = Field(min_length=1)
+    history: list[ChatHistoryItem] = Field(default_factory=list)

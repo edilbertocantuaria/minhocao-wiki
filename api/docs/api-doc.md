@@ -213,13 +213,17 @@ Erros:
 
 ### 9. Chat (Streaming)
 
-`POST /chat` (protegido)
+`POST /chat` (autenticado ou anonimo)
 
 Request:
 
 ```json
 {
-  "conversation_id": "uuid",
+  "conversation_id": "uuid-opcional",
+  "history": [
+    { "role": "user", "content": "Pergunta anterior" },
+    { "role": "assistant", "content": "Resposta anterior" }
+  ],
   "question": "Qual e a historia do ICC?"
 }
 ```
@@ -233,12 +237,13 @@ Nao retorna JSON nesse endpoint. O cliente deve ler stream incrementalmente.
 
 Comportamentos relevantes:
 
-1. Busca o historico da conversa e usa como contexto.
-2. Se o titulo estiver vazio/untitled, gera titulo automaticamente por LLM.
-3. Salva mensagem do usuario e resposta final do assistente no banco.
+1. Com token JWT: usa `conversation_id`, busca historico no banco e persiste novas mensagens.
+2. Sem token: aceita chat anonimo e usa `history` enviado pelo cliente como contexto.
+3. Se autenticado e titulo estiver vazio/untitled, gera titulo automaticamente por LLM.
 
 Erros:
 
+- `400` quando autenticado sem `conversation_id`
 - `404` conversa não encontrada
 - `422` payload invalido
 
@@ -249,10 +254,11 @@ const response = await fetch('http://localhost:8000/chat', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
   },
   body: JSON.stringify({
-    conversation_id: conversationId,
+    conversation_id: conversationId, // opcional em modo anonimo
+    history: localHistory, // opcional, usado no modo anonimo
     question: message,
   }),
 })
