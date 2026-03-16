@@ -169,7 +169,7 @@ export function ChatSidebar({
                       <AlertDialogHeader>
                         <AlertDialogTitle>Excluir conversa</AlertDialogTitle>
                         <AlertDialogDescription>
-                          Tem certeza que deseja excluir esta conversa? Esta ação nao pode ser desfeita e todas as mensagens serão perdidas.
+                          Tem certeza que deseja excluir esta conversa? Esta ação não pode ser desfeita e todas as mensagens serão perdidas.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>

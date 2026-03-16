@@ -118,7 +118,7 @@ Comportamento:
 1. Valida `id_token` no endpoint `https://oauth2.googleapis.com/tokeninfo`.
 2. Verifica `aud` igual a `GOOGLE_CLIENT_ID`.
 3. Exige email verificado.
-4. Cria usuario automaticamente se nao existir.
+4. Cria usuario automaticamente se não existir.
 
 Response `200`:
 
@@ -131,8 +131,8 @@ Response `200`:
 
 Erros comuns:
 
-- `401` token invalido ou email nao verificado
-- `503` Google auth nao configurado ou servico indisponivel
+- `401` token invalido ou email não verificado
+- `503` Google auth não configurado ou servico indisponivel
 
 ### 5. Create Conversation
 
@@ -199,7 +199,7 @@ Response `200`:
 
 Erros:
 
-- `404` conversa nao encontrada
+- `404` conversa não encontrada
 
 ### 8. Delete Conversation
 
@@ -209,7 +209,7 @@ Response `204 No Content`.
 
 Erros:
 
-- `404` conversa nao encontrada
+- `404` conversa não encontrada
 
 ### 9. Chat (Streaming)
 
@@ -239,7 +239,7 @@ Comportamentos relevantes:
 
 Erros:
 
-- `404` conversa nao encontrada
+- `404` conversa não encontrada
 - `422` payload invalido
 
 ## Exemplo de consumo do /chat (Frontend)
@@ -275,5 +275,5 @@ while (true) {
 ## Notes for Integrators
 
 1. Prefira usar as rotas proxy do frontend (`web/app/api/*`) para evitar expor URL interna da API no browser.
-2. O token JWT atual nao possui refresh token; refaca login quando expirar.
+2. O token JWT atual não possui refresh token; refaca login quando expirar.
 3. Para login Google em ambiente local, configure origem `http://localhost:3000` no Google Cloud.

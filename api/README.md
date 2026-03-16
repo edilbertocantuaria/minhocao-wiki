@@ -136,7 +136,7 @@ Comportamento incremental (padrao):
 - Novo documento: adiciona vetores do novo PDF.
 - Documento atualizado: remove vetores antigos desse arquivo e indexa novamente.
 - Documento removido: remove vetores desse arquivo do Pinecone.
-- Documento inalterado: nao reprocessa.
+- Documento inalterado: não reprocessa.
 - Se `api/docs/unb` ja existir com arquivos, a ingestao reutiliza a pasta descompactada para evitar sobreposicao.
 
 Estado da ingestao:

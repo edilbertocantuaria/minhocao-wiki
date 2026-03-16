@@ -83,7 +83,7 @@ A ingestao processa somente o delta:
 - Novo documento: adiciona vetores.
 - Documento atualizado: remove vetores antigos desse arquivo e reindexa.
 - Documento removido: remove vetores correspondentes.
-- Documento inalterado: nao reprocessa.
+- Documento inalterado: não reprocessa.
 
 ## Regras de extracao do ZIP
 
@@ -144,5 +144,5 @@ A cada execucao sao gerados:
 3. Quero evitar conflito entre auto e manual:
 - Pare o worker automatico antes da execucao manual e religue ao final.
 
-4. Mudancas nao refletiram como esperado:
+4. Mudancas não refletiram como esperado:
 - Verifique api/logs/ingestion_audit_latest.json e o arquivo txt mais recente em api/logs.

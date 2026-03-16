@@ -156,6 +156,6 @@ pnpm lint
 
 ## Troubleshooting
 
-1. Erro `Google Login nao configurado`: confirme `GOOGLE_CLIENT_ID` no `.env` e refaca `docker compose build web api`.
+1. Erro `Google Login não configurado`: confirme `GOOGLE_CLIENT_ID` no `.env` e refaca `docker compose build web api`.
 2. Erro de DB na API: confirme `DATABASE_URL` e se `db` esta em execucao no compose.
 3. Sem respostas do RAG: valide `OPENAI_API_KEY`, `PINECONE_API_KEY` e indexacao.

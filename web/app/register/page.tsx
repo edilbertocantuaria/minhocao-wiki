@@ -28,7 +28,7 @@ export default function RegisterPage() {
     setError('')
 
     if (password !== confirmPassword) {
-      setError('As senhas nao coincidem')
+      setError('As senhas não coincidem')
       return
     }
 

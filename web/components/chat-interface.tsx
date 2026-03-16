@@ -345,7 +345,7 @@ export function ChatInterface() {
       await syncConversationTitle(chatId)
 
       if (!response.body) {
-        throw new Error('A API nao retornou corpo de resposta.')
+        throw new Error('A API não retornou corpo de resposta.')
       }
 
       const reader = response.body.getReader()
