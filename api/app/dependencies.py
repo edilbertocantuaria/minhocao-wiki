@@ -38,3 +38,18 @@ def get_current_user(
         raise credentials_exception
 
     return user
+
+
+def get_optional_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+) -> User | None:
+    if credentials is None:
+        return None
+
+    try:
+        user_id = decode_access_token(credentials.credentials)
+    except ValueError:
+        return None
+
+    return db.query(User).filter(User.id == user_id).first()

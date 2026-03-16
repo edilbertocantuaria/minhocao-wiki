@@ -3,7 +3,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_optional_current_user
 from app.logger import log_query
 from app.models import User
 from app.schemas import ChatRequest
@@ -22,30 +22,45 @@ router = APIRouter(tags=["chat"])
 async def chat(
     payload: ChatRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User | None = Depends(get_optional_current_user),
 ):
-    conversation = get_conversation_for_user(
-        db=db,
-        conversation_id=payload.conversation_id,
-        user_id=current_user.id,
-    )
-    if conversation is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+    conversation = None
+    history_str = ""
 
-    history = list_messages(db=db, conversation_id=conversation.id)
-    history_str = build_history_str(
-        [{"role": message.role, "content": message.content} for message in history]
-    )
+    if current_user is not None:
+        if not payload.conversation_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="conversation_id is required for authenticated requests",
+            )
 
-    current_title = (conversation.title or "").strip().lower()
-    if current_title in {"", "conversa sem titulo", "conversa sem título", "untitled conversation"}:
-        update_conversation_title(
+        conversation = get_conversation_for_user(
             db=db,
-            conversation=conversation,
-            title=generate_conversation_title(payload.question),
+            conversation_id=payload.conversation_id,
+            user_id=current_user.id,
+        )
+        if conversation is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+
+        history = list_messages(db=db, conversation_id=conversation.id)
+        history_str = build_history_str(
+            [{"role": message.role, "content": message.content} for message in history]
         )
 
-    save_message(db=db, conversation_id=conversation.id, role="user", content=payload.question)
+        current_title = (conversation.title or "").strip().lower()
+        if current_title in {"", "conversa sem titulo", "conversa sem título", "untitled conversation"}:
+            update_conversation_title(
+                db=db,
+                conversation=conversation,
+                title=generate_conversation_title(payload.question),
+            )
+
+        save_message(db=db, conversation_id=conversation.id, role="user", content=payload.question)
+    else:
+        history_str = build_history_str(
+            [{"role": item.role, "content": item.content} for item in payload.history]
+        )
+
     chain_input, sources = build_chain_input(question=payload.question, history_str=history_str)
 
     async def stream():
@@ -55,7 +70,9 @@ async def chat(
                 full_answer += chunk.content
                 yield chunk.content
 
-        save_message(db=db, conversation_id=conversation.id, role="assistant", content=full_answer)
+        if conversation is not None:
+            save_message(db=db, conversation_id=conversation.id, role="assistant", content=full_answer)
+
         log_query(payload.question, sources, full_answer)
 
     return StreamingResponse(stream(), media_type="text/plain")
