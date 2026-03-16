@@ -41,10 +41,8 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="flex flex-col items-center gap-3 mb-8">
-          <div className="size-14 rounded-2xl bg-primary/10 flex items-center justify-center">
-            <Sparkles className="size-7 text-primary" />
-          </div>
-          <h1 className="text-2xl font-semibold text-foreground">Minhocao Wiki</h1>
+          <img src="/minhocao_wiki.png" alt="Minhocão Wiki" className="size-45" />
+          <h1 className="text-2xl font-semibold text-foreground">Minhocão Wiki</h1>
           <p className="text-muted-foreground text-center text-balance">
             Entre na sua conta para continuar
           </p>

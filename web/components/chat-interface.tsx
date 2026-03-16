@@ -436,8 +436,7 @@ export function ChatInterface() {
         <header className="flex items-center justify-between px-4 py-3 border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-30">
           <div className="flex items-center gap-2">
             {!sidebarOpen && <div className="w-10" />}
-            <Sparkles className="size-5 text-primary" />
-            <h1 className="font-semibold text-foreground">Minhocao Wiki</h1>
+            <h1 className="font-semibold text-foreground">Minhocão Wiki</h1>
           </div>
           <div className="flex items-center gap-1">
             {user?.email && (
@@ -467,14 +466,15 @@ export function ChatInterface() {
           <div className="max-w-3xl mx-auto">
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
-                <div className="size-16 rounded-2xl bg-primary/10 flex items-center justify-center">
+                {/* <div className="size-16 rounded-2xl bg-primary/10 flex items-center justify-center">
                   <Sparkles className="size-8 text-primary" />
-                </div>
+                </div> */}
+                <img src="/minhocao_wiki.png" alt="Minhocão Wiki" className="size-45" />
                 <h2 className="text-2xl font-semibold text-foreground text-center text-balance">
                   Como posso ajudar voce hoje?
                 </h2>
                 <p className="text-muted-foreground text-center max-w-md text-balance">
-                  Faca uma pergunta sobre o Minhocao e eu responderei com base nos documentos disponiveis.
+                  Faca uma pergunta sobre a Unb e eu responderei com base nos documentos disponiveis.
                 </p>
               </div>
             ) : (
