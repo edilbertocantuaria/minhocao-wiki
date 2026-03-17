@@ -71,7 +71,7 @@ build/
 api/docs/*.pdf
 api/docs/*.zip
 api/docs/*.docx
-api/docs/unb
+
 
 # =========================
 # Experiment outputs
