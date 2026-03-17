@@ -76,6 +76,7 @@ services:
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - INGEST_INTERVAL_SECONDS=${INGEST_INTERVAL_SECONDS:-7200}
+      - PYTHONUNBUFFERED=1
     volumes:
       - ./api/config.yaml:/app/config.yaml:ro
       - ./api/docs:/app/docs
