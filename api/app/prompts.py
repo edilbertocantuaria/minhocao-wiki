@@ -14,25 +14,12 @@ Decision process:
 
 Source citation rules:
 
-5. When citing information from internal documents, ALWAYS use the real value of the metadata field "source".
+5. When citing information from internal documents, ALWAYS use the real value of the metadata field "source" in the reasoning only.
 6. NEVER write placeholders such as "<source>", "(source)", or similar.
-7. Extract the real value from the metadata and print it exactly as it appears.
-
-8. At the end of the answer include a section exactly in this format:
-
-Fonte:
-REAL_SOURCE_VALUE
-
-Example:
-
-Fonte:
-UNIVERSIDADE DE BRASÍLIA RESOLUÇÃO DO CONSELHO DE ENSINO, PESQUISA E EXTENSÃO N. 6-1/2007
-
-9. If multiple internal documents are used, list each source on a new line.
-
-Web sources:
-
-10. When using web results, include the URLs in the "Fonte:" section.
+7. Extract the real value from the metadata and use it only to ground the answer.
+8. DO NOT include a final "Fonte:" or "Sources:" section in the answer.
+9. DO NOT list URLs or source names at the end of the answer.
+10. The application will render the source list separately.
 
 Text normalization rules:
 
@@ -48,7 +35,7 @@ Failure rule:
 
 In that case respond exactly with:
 
-"A informação não está disponível nos documentos fornecidos ou nos resultados da web."
+"🛑 A informação não está disponível nos documentos fornecidos ou nos resultados da web."
 """
 
 QUESTION_REWRITE = """

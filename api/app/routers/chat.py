@@ -18,6 +18,30 @@ from app.services.conversation_service import (
 router = APIRouter(tags=["chat"])
 
 
+def _should_hide_sources(answer: str) -> bool:
+    normalized = " ".join(answer.lower().split())
+    no_answer_markers = [
+        "a informação não está disponível nos documentos fornecidos ou nos resultados da web",
+        "não foi encontrada nos resultados da web disponíveis",
+    ]
+    return any(marker in normalized for marker in no_answer_markers)
+
+
+def _select_sources(answer: str, sources: dict[str, list[str]]) -> list[str]:
+    if _should_hide_sources(answer):
+        return []
+
+    normalized = " ".join(answer.lower().split())
+    uses_web = normalized.startswith(
+        "⚠️ esta resposta foi gerada com base em resultados da web e não em documentos oficiais do repositório."
+    )
+
+    if uses_web:
+        return [source for source in sources.get("web", []) if source.strip()]
+
+    return [source for source in sources.get("internal", []) if source.strip()]
+
+
 def _format_sources_block(sources: list[str]) -> str:
     unique_sources: list[str] = []
     for source in sources:
@@ -85,7 +109,8 @@ async def chat(
                 full_answer += chunk.content
                 yield chunk.content
 
-        sources_block = _format_sources_block(sources)
+        selected_sources = _select_sources(full_answer, sources)
+        sources_block = _format_sources_block(selected_sources)
         if sources_block:
             full_answer += sources_block
             yield sources_block
@@ -93,6 +118,6 @@ async def chat(
         if conversation is not None:
             save_message(db=db, conversation_id=conversation.id, role="assistant", content=full_answer)
 
-        log_query(payload.question, sources, full_answer)
+        log_query(payload.question, selected_sources, full_answer)
 
     return StreamingResponse(stream(), media_type="text/plain")

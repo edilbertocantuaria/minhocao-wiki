@@ -457,7 +457,7 @@ export function ChatInterface() {
   }
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex h-screen min-w-0 bg-background">
       {/* Sidebar */}
       <ChatSidebar
         isOpen={sidebarOpen}
@@ -473,7 +473,7 @@ export function ChatInterface() {
       {/* Main Content */}
       <main
         className={cn(
-          'flex-1 flex flex-col transition-all duration-300 ease-in-out',
+          'flex min-w-0 flex-1 flex-col transition-all duration-300 ease-in-out',
           sidebarOpen ? 'ml-64' : 'ml-0'
         )}
       >
@@ -530,8 +530,8 @@ export function ChatInterface() {
         </header>
 
         {/* Messages Area */}
-        <ScrollArea className="flex-1">
-          <div className="max-w-3xl mx-auto">
+        <ScrollArea className="min-w-0 flex-1">
+          <div className="mx-auto w-full max-w-3xl min-w-0 px-4 sm:px-6">
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
                 {/* <div className="size-16 rounded-2xl bg-primary/10 flex items-center justify-center">
@@ -546,7 +546,7 @@ export function ChatInterface() {
                 </p>
               </div>
             ) : (
-              <div className="divide-y divide-border/50 pb-4">
+              <div className="min-w-0 divide-y divide-border/50 pb-4">
                 {messages.map((message) => (
                   <ChatMessage key={message.id} message={message} />
                 ))}
@@ -558,7 +558,7 @@ export function ChatInterface() {
 
         {/* Input Area */}
         <div className="border-t border-border bg-background/80 backdrop-blur-sm px-4 py-3">
-          <div className="max-w-3xl mx-auto">
+          <div className="mx-auto w-full max-w-3xl min-w-0">
             <ChatInput
               onSend={handleSendMessage}
               isLoading={isLoading}

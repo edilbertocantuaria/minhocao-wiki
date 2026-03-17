@@ -52,7 +52,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
   return (
     <div
       className={cn(
-        'flex gap-4 px-4 py-6',
+        'flex min-w-0 max-w-full gap-4 py-6',
         isUser ? 'bg-transparent' : 'bg-muted/30'
       )}
     >
@@ -66,7 +66,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
       >
         {isUser ? <User className="size-4" /> : <Bot className="size-4" />}
       </div>
-      <div className="flex-1 space-y-2">
+      <div className="min-w-0 flex-1 space-y-2">
         {isUser ? (
           <>
             <p className="text-sm font-medium text-foreground">Você</p>
@@ -76,7 +76,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
           </>
         ) : (
           <>
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 items-start justify-between gap-3">
               <p className="text-sm font-medium text-foreground">Assistente</p>
               {!isStreamingAssistant && (
                 <Button
@@ -98,7 +98,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
                 <span className="size-2 rounded-full bg-muted-foreground/50 animate-bounce [animation-delay:300ms]" />
               </div>
             ) : (
-              <div className="text-sm text-foreground/90 leading-relaxed break-words [overflow-wrap:anywhere] [&_a]:break-all [&_a]:text-primary [&_a]:underline [&_code]:rounded [&_code]:bg-background/80 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.9em] [&_li]:ml-5 [&_li]:list-disc [&_li]:break-words [&_ol]:ml-5 [&_ol]:list-decimal [&_p]:break-words [&_p:not(:first-child)]:mt-3 [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:bg-background/80 [&_pre]:p-4 [&_pre]:text-xs [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_ul]:ml-5 [&_ul]:list-disc [&_ul:not(:first-child)]:mt-3">
+              <div className="min-w-0 max-w-full text-sm text-foreground/90 leading-relaxed break-words [overflow-wrap:anywhere] [&_a]:break-all [&_a]:text-primary [&_a]:underline [&_code]:rounded [&_code]:bg-background/80 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.9em] [&_li]:ml-5 [&_li]:list-disc [&_li]:break-words [&_ol]:ml-5 [&_ol]:list-decimal [&_p]:break-words [&_p:not(:first-child)]:mt-3 [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:bg-background/80 [&_pre]:p-4 [&_pre]:text-xs [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_ul]:ml-5 [&_ul]:list-disc [&_ul:not(:first-child)]:mt-3">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
@@ -106,7 +106,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
                       const language = getCodeBlockLanguage(children)
 
                       return (
-                        <div className="my-4 overflow-hidden rounded-2xl border border-zinc-300 bg-zinc-50 text-zinc-900 shadow-lg dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
+                        <div className="my-4 w-full max-w-full overflow-hidden rounded-2xl border border-zinc-300 bg-zinc-50 text-zinc-900 shadow-lg dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
                           <div className="flex items-center justify-between border-b border-zinc-300 px-4 py-2 dark:border-zinc-800">
                             <div className="flex items-center gap-2">
                               <span className="size-2.5 rounded-full bg-red-400" />
@@ -117,7 +117,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
                               {language}
                             </span>
                           </div>
-                          <pre className="overflow-x-auto bg-transparent p-4 text-xs leading-6 text-zinc-900 dark:text-zinc-100">
+                          <pre className="max-w-full overflow-x-auto bg-transparent p-4 text-xs leading-6 text-zinc-900 dark:text-zinc-100">
                             {children}
                           </pre>
                         </div>

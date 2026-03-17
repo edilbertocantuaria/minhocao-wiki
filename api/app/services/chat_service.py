@@ -34,9 +34,10 @@ def process_internal_docs(docs):
     source_list = []
     for doc in docs:
         formatted_source = format_document_title(doc.metadata.get("source", ""))
-        source_list.append(formatted_source)
+        if formatted_source and formatted_source != "Unknown Source" and formatted_source not in source_list:
+            source_list.append(formatted_source)
         context_parts.append(f"SOURCE: {formatted_source}\nCONTENT: {doc.page_content}")
-    return "\n\n".join(context_parts), list(set(source_list))
+    return "\n\n".join(context_parts), source_list
 
 
 def build_history_str(history: list[dict]) -> str:
@@ -54,13 +55,11 @@ def build_chain_input(question: str, history_str: str):
     web_sources = []
     if not internal_ctx:
         web_ctx, web_links = get_web_context(query)
-        web_sources = [f"fonte-web: {link}" for link in web_links]
+        web_sources = [f"{link}" for link in web_links]
 
     full_context = (
         "INSTRUCTION: Be formal, highly detailed, and verbose. "
-        "Prioritize 'OFFICIAL SOURCE' if available. "
-        "If you use information from 'SOURCE WEB', cite it as 'fonte-web: [URL]'. "
-        "List all sources at the very end of your response.\n\n"
+        "Prioritize 'OFFICIAL SOURCE' if available.\n\n"
         f"--- OFFICIAL REPOSITORY ---\n{internal_ctx if internal_ctx else 'No official documents found.'}\n\n"
         f"--- WEB RESULTS ---\n{web_ctx}"
     )
@@ -73,4 +72,4 @@ def build_chain_input(question: str, history_str: str):
         }
     )
 
-    return chain_input, internal_src + web_sources
+    return chain_input, {"internal": internal_src, "web": web_sources}
